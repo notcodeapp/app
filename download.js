@@ -21,7 +21,12 @@ function pickApk(release) {
   const apks = (release.assets || []).filter((a) =>
     a.name.toLowerCase().endsWith(".apk")
   );
-  return apks.find((a) => !/debug/i.test(a.name)) || apks[0] || null;
+  return (
+    apks.find((a) => /universal/i.test(a.name)) ||
+    apks.find((a) => !/debug/i.test(a.name)) ||
+    apks[0] ||
+    null
+  );
 }
 
 function startDownload(url) {
