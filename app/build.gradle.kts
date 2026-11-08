@@ -23,8 +23,8 @@ android {
         applicationId = "com.notcode.mobile"
         minSdk = 31
         targetSdk = 34
-        versionCode = 20
-        versionName = "1.2.3"
+        versionCode = 21
+        versionName = "1.2.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
