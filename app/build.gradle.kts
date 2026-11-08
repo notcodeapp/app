@@ -22,9 +22,14 @@ android {
     defaultConfig {
         applicationId = "com.notcode.mobile"
         minSdk = 31
-        targetSdk = 34
-        versionCode = 21
-        versionName = "1.2.4"
+        // PRoot exec'ит бинарники из data-каталога. SELinux разрешает execute_no_trans на
+        // app_data_file только legacy-доменам untrusted_app_25/27, то есть targetSdk <= 28;
+        // начиная с 29 Ubuntu-среда на устройстве перестаёт запускаться. 28 — нижняя граница
+        // системного предупреждения «built for an older version of Android» (минимум 28),
+        // поэтому ниже опускать смысла нет.
+        targetSdk = 28
+        versionCode = 22
+        versionName = "1.2.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

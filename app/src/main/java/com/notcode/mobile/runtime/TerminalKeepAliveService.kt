@@ -5,8 +5,6 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ServiceInfo
-import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -25,15 +23,8 @@ class TerminalKeepAliveService : Service() {
             .setContentText("Терминал и агент продолжают работу")
             .setOngoing(true)
             .build()
-        // Android 14 требует передать тип foreground-сервиса, объявленный в манифесте.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
-        // С targetSdk 34 система не даёт поднимать foreground-сервис из фона, а вместе с сервисом
-        // умирают и терминал, и агент — перерождение удерживать нечего.
-        return START_NOT_STICKY
+        startForeground(NOTIFICATION_ID, notification)
+        return START_STICKY
     }
 
     companion object {
