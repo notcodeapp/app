@@ -1,9 +1,19 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
 }
+
+// Signing material lives outside the source tree and is never published.
+val releaseSigningProperties = Properties().apply {
+    val file = File(projectDir, "../../.keys/notcode-release.properties")
+    if (file.isFile) FileInputStream(file).use { load(it) }
+}
+val releaseSigningReady = releaseSigningProperties.getProperty("storePassword") != null
 
 android {
     namespace = "com.notcode.mobile"
@@ -13,15 +23,35 @@ android {
         applicationId = "com.notcode.mobile"
         minSdk = 31
         targetSdk = 28
-        versionCode = 19
-        versionName = "1.2.2"
+        versionCode = 20
+        versionName = "1.2.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
 
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = true
+        }
+    }
+
     lint {
         disable += "ExpiredTargetSdkVersion"
+    }
+
+    signingConfigs {
+        if (releaseSigningReady) {
+            create("release") {
+                storeFile = File(projectDir, releaseSigningProperties.getProperty("storeFile"))
+                storePassword = releaseSigningProperties.getProperty("storePassword")
+                keyAlias = releaseSigningProperties.getProperty("keyAlias")
+                keyPassword = releaseSigningProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -30,12 +60,16 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // R8 stays off until keep rules for JGit, JSch and OkHttp are covered by tests.
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            if (releaseSigningReady) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

@@ -143,6 +143,7 @@ fun NotCodeApp(vm: IdeViewModel) {
                     modifier = Modifier.clickable { showSshScreen = true; scope.launch { drawer.close() } },
                 )
                 Text(vm.activeWorkspaceLabel, Modifier.padding(20.dp), fontWeight = FontWeight.Bold)
+                if (vm.filesLoading || vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (!vm.folder.isRoot) ListItem(headlineContent = { Text(".. / Назад") }, leadingContent = { Icon(Icons.Outlined.ArrowBack, null) }, modifier = Modifier.clickable { vm.browse(vm.folder.parent) })
                 LazyColumn(Modifier.weight(1f)) {
                     items(vm.entries, key = { it.path.value }) { entry ->
@@ -172,7 +173,7 @@ fun NotCodeApp(vm: IdeViewModel) {
                         Text(if (vm.hasActiveWorkspace) vm.activeWorkspaceLabel else "Ваш код. Всегда с вами.", Modifier.padding(start = 8.dp).weight(1f), fontSize = 12.sp, color = Green)
                         if (vm.hasActiveWorkspace) Text(if (vm.sshWorkspaceActive) "SSH" else "РАБОЧАЯ КОПИЯ", fontSize = 9.sp, color = Green)
                     }
-                    if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    if (vm.busy || vm.filesLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
             }, bottomBar = {
                 NavigationBar(containerColor = Paper, tonalElevation = 0.dp) {
@@ -363,8 +364,9 @@ private fun EditorScreen(vm: IdeViewModel, open: () -> Unit, files: () -> Unit, 
                 TextButton(onClick = files) { Text("Проводник") }
             }
             Text(vm.folder.value.ifBlank { "/" }, Modifier.padding(horizontal = 16.dp), color = Muted, fontSize = 12.sp)
+            if (vm.filesLoading || vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (!vm.folder.isRoot) TextButton(onClick = { vm.browse(vm.folder.parent) }) { Text(".. / Назад") }
-            if (vm.entries.isEmpty()) Text(if (vm.busy) "Загружаем файлы…" else "Папка пуста. Создайте файл в проводнике.", Modifier.padding(20.dp), color = Muted)
+            if (vm.entries.isEmpty()) Text(if (vm.busy || vm.filesLoading) "Загружаем файлы…" else "Папка пуста. Создайте файл в проводнике.", Modifier.padding(20.dp), color = Muted)
             LazyColumn(Modifier.weight(1f)) {
                 items(vm.entries, key = { it.path.value }) { entry ->
                     ListItem(headlineContent = { Text(entry.name) }, leadingContent = { Icon(if (entry.isDirectory) Icons.Outlined.Folder else Icons.Outlined.Description, null) }, trailingContent = { if (!entry.isDirectory && entry.editable) FileActions(entry.path, canEdit, rename, delete) }, modifier = Modifier.clickable {

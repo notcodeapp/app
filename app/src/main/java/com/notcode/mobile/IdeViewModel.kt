@@ -249,6 +249,8 @@ class IdeViewModel(app: Application) : AndroidViewModel(app) {
 
     var folder by mutableStateOf(ProjectPath.Root)
     var entries by mutableStateOf<List<ProjectEntry>>(emptyList())
+    var filesLoading by mutableStateOf(false)
+        private set
     val documents = mutableStateListOf<EditorDocument>()
     private val documentBackStack = mutableListOf<EditorDocument>()
     var selectedDocument by mutableStateOf<EditorDocument?>(null)
@@ -547,9 +549,21 @@ class IdeViewModel(app: Application) : AndroidViewModel(app) {
         treeFingerprint = fingerprint
         projectFiles.clear(); projectFiles.addAll(fileStates.values.map { it.path })
     }
-    fun browse(path: ProjectPath) = perform { folder = path; refresh() }
+    fun browse(path: ProjectPath) = perform {
+        // Показать папку сразу; полный обход дерева для списка файлов чата идёт под индикатором.
+        folder = path
+        entries = listMerged(path)
+        filesLoading = true
+        try { refresh() } finally { filesLoading = false }
+    }
+
     fun openFile(path: ProjectPath) = perform {
-        documents.firstOrNull { it.path == path }?.let { selectDocument(it); tab = 0; return@perform }
+        filesLoading = true
+        try { openDocument(path) } finally { filesLoading = false }
+    }
+
+    private suspend fun openDocument(path: ProjectPath) {
+        documents.firstOrNull { it.path == path }?.let { selectDocument(it); tab = 0; return }
         val fs = requireNotNull(activeFileSystem)
         val loaded = try {
             fs.readText(path, EDITOR_MAX_BYTES)
@@ -560,7 +574,7 @@ class IdeViewModel(app: Application) : AndroidViewModel(app) {
         } catch (_: ProjectFileTooLargeException) {
             null
         }
-        if (activeFileSystem !== fs) return@perform
+        if (activeFileSystem !== fs) return
         val doc = if (loaded != null) {
             EditorDocument(path, loaded.text, loaded.revision)
         } else if (sshWorkspaceActive) {
@@ -592,7 +606,7 @@ class IdeViewModel(app: Application) : AndroidViewModel(app) {
                 EditorDocument(path, hex.ifBlank { "(пустой файл)" }, preview.revision, readOnly = true, previewInfo = info)
             }
         }
-        if (activeFileSystem !== fs) return@perform
+        if (activeFileSystem !== fs) return
         val selected = documents.firstOrNull { it.path == path } ?: doc.also { documents.add(it) }
         selectDocument(selected); tab = 0
     }

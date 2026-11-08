@@ -111,6 +111,22 @@ class GithubReleaseTest {
         assertEquals("1.2.0", GithubReleases.installedVersion("1.2.0-debug"))
     }
 
+    @Test fun universalAssetWinsAmongAbiBuilds() {
+        val releases = parse(
+            release(
+                "v2.1.0",
+                listOf(
+                    apk("v2.1.0", name = "notcode-arm64-v8a-v2.1.0.apk"),
+                    apk("v2.1.0", name = "notcode-universal-v2.1.0.apk"),
+                    apk("v2.1.0", name = "notcode-armeabi-v7a-v2.1.0.apk"),
+                ),
+            ),
+        )
+        assertEquals("notcode-universal-v2.1.0.apk", GithubReleases.pickApk(releases, "1.2.3")?.asset?.name)
+        val abiOnly = parse(release("v2.1.0", listOf(apk("v2.1.0", name = "notcode-arm64-v8a.apk"))))
+        assertEquals("notcode-arm64-v8a.apk", GithubReleases.pickApk(abiOnly, "1.2.3")?.asset?.name)
+    }
+
     @Test fun assetSizeAndNotesAreCarried() {
         val target = GithubReleases.pickApk(
             parse(release("v9.9.9", listOf(apk("v9.9.9", size = 12345678L)), body = "исправлены ретраи")),

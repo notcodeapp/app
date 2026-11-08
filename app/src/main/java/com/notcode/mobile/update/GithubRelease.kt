@@ -97,12 +97,17 @@ object GithubReleases {
         val current = installedVersion(installed)
         val candidates = releases.mapNotNull { release ->
             val version = versionOf(release.tagName) ?: return@mapNotNull null
-            val asset = release.assets.firstOrNull() ?: return@mapNotNull null
+            val asset = preferredApk(release) ?: return@mapNotNull null
             if (compare(version, current) <= 0) return@mapNotNull null
             Triple(if (release.prerelease) 0L else 1L, orderKey(version), UpdateTarget(release, asset))
         }
         return candidates.maxWithOrNull(compareBy({ it.first }, { it.second }))?.third
     }
+
+    /** Per-ABI builds share one release; the universal APK installs on every device. */
+    fun preferredApk(release: GithubRelease): ReleaseAsset? =
+        release.assets.firstOrNull { it.name.contains("universal", ignoreCase = true) }
+            ?: release.assets.firstOrNull()
 
     private fun orderKey(version: String): Long =
         segments(version).take(3).fold(0L) { accumulator, part ->
