@@ -22,7 +22,7 @@ android {
     defaultConfig {
         applicationId = "com.notcode.mobile"
         minSdk = 31
-        targetSdk = 28
+        targetSdk = 34
         versionCode = 20
         versionName = "1.2.3"
 
