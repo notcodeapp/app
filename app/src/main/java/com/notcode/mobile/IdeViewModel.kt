@@ -71,7 +71,6 @@ private const val EDITOR_MAX_BYTES = 1024L * 1024
 private const val BYTE_PREVIEW_BYTES = 4096L
 private const val AUTO_UPDATE_INTERVAL_MS = 6L * 60 * 60 * 1000
 private const val MAX_TREE_DIRECTORIES = 4000
-private const val MAX_TREE_FILES = 2000
 private const val TREE_LISTING_PARALLELISM = 8
 
 private fun formatHexPreview(bytes: ByteArray): String = bytes.asList().chunked(16).mapIndexed { row, chunk ->
@@ -515,7 +514,7 @@ class IdeViewModel(app: Application) : AndroidViewModel(app) {
         val directoryCounts = sortedMapOf<String, Int>()
         var pending = listOf(ProjectPath.Root)
         var listed = 0
-        while (pending.isNotEmpty() && listed < MAX_TREE_DIRECTORIES && fileStates.size < MAX_TREE_FILES) {
+        while (pending.isNotEmpty() && listed < MAX_TREE_DIRECTORIES) {
             val batch = pending.take(MAX_TREE_DIRECTORIES - listed)
             listed += batch.size
             val childrenOfBatch = mutableListOf<Pair<ProjectPath, List<ProjectEntry>>>()
