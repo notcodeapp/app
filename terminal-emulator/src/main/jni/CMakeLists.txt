@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(termux LANGUAGES C)
+add_library(termux SHARED termux.c)
+set_target_properties(termux PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+target_compile_options(termux PRIVATE -Wall -Wextra -Werror -Os)
+target_link_options(termux PRIVATE -Wl,-z,max-page-size=16384)

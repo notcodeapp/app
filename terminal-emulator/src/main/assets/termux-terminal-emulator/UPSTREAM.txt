@@ -1,0 +1,11 @@
+Source: https://github.com/termux/termux-app
+Commit: 8629e632fcb95da272221be327db653fb24befe9
+Archive: https://codeload.github.com/termux/termux-app/tar.gz/8629e632fcb95da272221be327db653fb24befe9
+Component: terminal-emulator (complete src/main and src/test vendored)
+License: GPL-3.0-only; complete GPLv3 text included as LICENSE.txt.
+Official root LICENSE.md preserved verbatim as UPSTREAM-LICENSE.txt.
+Original source headers are retained, including any per-file license notices.
+Local adaptations: standalone AGP 8.7.3 module build; CMake shared libtermux.so;
+consumer JNI keep rules. Native termux.c and emulator Java sources are unchanged.
+The accompanying terminal-view component and GPL-covered integration must be
+redistributed in accordance with the license, including corresponding source.
