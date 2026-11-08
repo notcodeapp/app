@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fafbf8" />
+    <meta
+      name="description"
+      content="Скачать NotCode для Android — последний релиз APK с GitHub. Выбор версии, инструкция по установке."
+    />
+    <meta name="robots" content="noindex" />
+    <title>Скачать NotCode для Android</title>
+    <link rel="icon" href="assets/notcode-app-icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="download.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header wrap">
+      <a class="brand" href="index.html" aria-label="NotCode — на главную">
+        <img src="assets/notcode-app-icon.svg" alt="" width="42" height="42" />
+        <span>notcode<span class="brand-dot">.</span></span>
+      </a>
+      <a class="header-link" href="index.html">
+        <span class="arrow" aria-hidden="true">←</span>
+        На главную
+      </a>
+    </header>
+
+    <main class="download-main wrap">
+      <div class="download-card">
+        <div id="state-loading">
+          <div class="spinner" aria-hidden="true"></div>
+          <h1>Получаю последний релиз…</h1>
+          <p class="lead">Секунду — спрашиваю у GitHub актуальную версию NotCode.</p>
+        </div>
+
+        <div id="state-ready" hidden>
+          <span class="state-icon state-icon-ok" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="m4.5 12.5 5 5 10-11" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <h1>Спасибо, что скачиваете NotCode!</h1>
+          <p class="lead">Загрузка APK должна была начаться автоматически. Приятного кодинга — и добро пожаловать в Telegram, если появятся вопросы.</p>
+          <div class="file-info">
+            <span>Версия: <b id="ready-version">—</b></span>
+            <span>Файл: <b id="ready-file">—</b></span>
+            <span>Размер: <b id="ready-size">—</b></span>
+          </div>
+          <div class="download-actions">
+            <button class="button button-primary" id="retry-download" type="button">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.5v9m0 0 3.5-3.5M8 10.5 4.5 7M2.5 13.5h11" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Попробовать снова
+            </button>
+            <a class="button button-secondary" id="ready-release-link" href="https://github.com/notcodeapp/app/releases" target="_blank" rel="noopener noreferrer">
+              Релиз на GitHub
+              <span class="button-arrow" aria-hidden="true">↗</span>
+            </a>
+          </div>
+          <p class="retry-hint">Не началась загрузка? <button id="retry-inline" type="button">Нажмите «Попробовать снова»</button> или откройте страницу релиза.</p>
+        </div>
+
+        <div id="state-empty" hidden>
+          <span class="state-icon state-icon-wait" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 6v6l4 2M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <h1>Первый релиз уже готовится</h1>
+          <p class="lead">Сборки APK появятся здесь и на GitHub, как только будут готовы. Следите за анонсами в Telegram — там мы рассказываем о ходе разработки.</p>
+          <div class="download-actions">
+            <a class="button button-telegram" href="https://t.me/NotCodeAI" target="_blank" rel="noopener noreferrer">
+              <img src="assets/telegram.svg" alt="" width="22" height="22" />
+              Следить в Telegram
+            </a>
+            <a class="button button-secondary" href="https://github.com/notcodeapp/app/releases" target="_blank" rel="noopener noreferrer">
+              Релизы на GitHub
+              <span class="button-arrow" aria-hidden="true">↗</span>
+            </a>
+          </div>
+        </div>
+
+        <div id="state-error" hidden>
+          <span class="state-icon state-icon-wait" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 8v5m0 3.5v.01M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <h1>Не удалось получить релиз</h1>
+          <p class="lead">Возможно, мешает сеть или временный лимит GitHub. Попробуйте ещё раз — или скачайте APK прямо со страницы релизов.</p>
+          <div class="download-actions">
+            <button class="button button-primary" id="retry-fetch" type="button">Попробовать снова</button>
+            <a class="button button-secondary" href="https://github.com/notcodeapp/app/releases" target="_blank" rel="noopener noreferrer">
+              Релизы на GitHub
+              <span class="button-arrow" aria-hidden="true">↗</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <section class="versions" aria-labelledby="versions-title">
+        <h2 id="versions-title">Все версии</h2>
+        <p>Нужна не последняя версия? Выберите любой релиз ниже — или откройте его описание на GitHub.</p>
+        <div id="releases-list">
+          <p class="versions-status" id="versions-status">Загружаю список релизов…</p>
+        </div>
+      </section>
+
+      <section class="install" aria-labelledby="install-title">
+        <h2 id="install-title">Как установить</h2>
+        <ol class="install-steps">
+          <li><b>Скачайте APK.</b> Загрузка начнётся автоматически на этой странице, либо выберите версию в списке выше.</li>
+          <li><b>Разрешите установку.</b> Android спросит разрешение на установку из неизвестных источников — подтвердите его для браузера или файлового менеджера.</li>
+          <li><b>Откройте файл и установите.</b> Требуется Android 8.0 или новее. После установки можно сразу открывать проект и настраивать своего ИИ-провайдера.</li>
+        </ol>
+        <p class="install-note">Скоро NotCode появится в RuStore — тогда обновления можно будет получать прямо из магазина. Версия для Windows тоже в планах. Новости — в <a href="https://t.me/NotCodeAI" target="_blank" rel="noopener noreferrer"><b>Telegram</b></a>, поддержать проект — на <a href="https://boosty.to/notcode" target="_blank" rel="noopener noreferrer"><b>Boosty</b></a>.</p>
+      </section>
+    </main>
+
+    <footer class="site-footer wrap">
+      <a class="footer-brand" href="index.html"><img src="assets/notcode-app-icon.svg" alt="" /><span>notcode<span class="brand-dot">.</span></span></a>
+      <p>Команда NotCode · <span id="year">2026</span></p>
+      <div class="footer-links">
+        <a href="https://github.com/notcodeapp/app" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://t.me/NotCodeAI" target="_blank" rel="noopener noreferrer">Telegram</a>
+        <a href="https://boosty.to/notcode" target="_blank" rel="noopener noreferrer">Boosty</a>
+      </div>
+    </footer>
+  </body>
+</html>
