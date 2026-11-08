@@ -32,7 +32,7 @@ class SafProjectFileSystem(
                 if (!document.isDirectory) {
                     throw ProjectFileException("Not a directory: ${directory.value}")
                 }
-                document.listFiles()
+                val children = listChildren(directory, document.uri) ?: document.listFiles()
                     .mapNotNull { child ->
                         val name = child.name ?: return@mapNotNull null
                         ProjectEntry(
@@ -43,12 +43,58 @@ class SafProjectFileSystem(
                             lastModifiedEpochMs = child.lastModified(),
                         )
                     }
-                    .sortedWith(
-                        compareByDescending<ProjectEntry> { it.isDirectory }
-                            .thenBy { it.name.lowercase() },
-                    )
+                children.sortedWith(
+                    compareByDescending<ProjectEntry> { it.isDirectory }
+                        .thenBy { it.name.lowercase() },
+                )
             }
         }
+
+    /**
+     * One provider query for the whole directory. DocumentFile.listFiles would need two
+     * extra queries per child for size and modification time, which dominated tree loading.
+     * Returns null when the provider does not answer the children query.
+     */
+    private fun listChildren(directory: ProjectPath, parentUri: Uri): List<ProjectEntry>? {
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
+            rootTreeUri,
+            DocumentsContract.getDocumentId(parentUri),
+        )
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+        )
+        val result = mutableListOf<ProjectEntry>()
+        val cursor = try {
+            resolver.query(childrenUri, projection, null, null, null)
+        } catch (_: RuntimeException) {
+            null
+        } ?: return null
+        return try {
+            cursor.use {
+                val nameColumn = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                val mimeColumn = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                val sizeColumn = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
+                val modifiedColumn = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+                while (cursor.moveToNext()) {
+                    val name = cursor.getString(nameColumn) ?: continue
+                    val isDirectory = cursor.getString(mimeColumn) == DocumentsContract.Document.MIME_TYPE_DIR
+                    result += ProjectEntry(
+                        path = directory.child(name),
+                        name = name,
+                        isDirectory = isDirectory,
+                        size = if (sizeColumn >= 0) cursor.getLong(sizeColumn) else 0L,
+                        lastModifiedEpochMs = if (modifiedColumn >= 0) cursor.getLong(modifiedColumn) else 0L,
+                    )
+                }
+            }
+            result
+        } catch (_: RuntimeException) {
+            null
+        }
+    }
 
     override suspend fun readText(path: ProjectPath, maxBytes: Long): TextDocument =
         withContext(Dispatchers.IO) {
@@ -56,7 +102,8 @@ class SafProjectFileSystem(
             guardPermission {
                 val document = resolve(path) ?: throw ProjectFileNotFoundException(path)
                 if (!document.isFile) throw ProjectFileException("Not a file: ${path.value}")
-                if (document.length() > maxBytes && document.length() > 0L) {
+                val size = document.length()
+                if (size > maxBytes && size > 0L) {
                     throw ProjectFileTooLargeException(path, maxBytes)
                 }
 
@@ -362,11 +409,32 @@ class SafProjectFileSystem(
         }
     }
 
-    private fun DocumentFile.revision(): FileRevision = FileRevision(
-        documentUri = uri.toString(),
-        size = length(),
-        lastModifiedEpochMs = lastModified(),
-    )
+    /** Reads size and modification time in one query; DocumentFile needs two. */
+    private fun DocumentFile.revision(): FileRevision {
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+        )
+        var size = -1L
+        var modified = -1L
+        try {
+            resolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val sizeColumn = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
+                    val modifiedColumn = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+                    if (sizeColumn >= 0) size = cursor.getLong(sizeColumn)
+                    if (modifiedColumn >= 0) modified = cursor.getLong(modifiedColumn)
+                }
+            }
+        } catch (_: RuntimeException) {
+            // Providers that reject the projection still answer the DocumentFile accessors.
+        }
+        return FileRevision(
+            documentUri = uri.toString(),
+            size = if (size >= 0) size else length(),
+            lastModifiedEpochMs = if (modified >= 0) modified else lastModified(),
+        )
+    }
 
     private inline fun <T> guardPermission(block: () -> T): T = try {
         block()

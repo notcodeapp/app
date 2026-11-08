@@ -70,6 +70,9 @@ private val terminalAddressPattern = Regex("""(?i)(?:https?://[^\s<>"']+|(?:loca
 private const val EDITOR_MAX_BYTES = 1024L * 1024
 private const val BYTE_PREVIEW_BYTES = 4096L
 private const val AUTO_UPDATE_INTERVAL_MS = 6L * 60 * 60 * 1000
+private const val MAX_TREE_DIRECTORIES = 4000
+private const val MAX_TREE_FILES = 2000
+private const val TREE_LISTING_PARALLELISM = 8
 
 private fun formatHexPreview(bytes: ByteArray): String = bytes.asList().chunked(16).mapIndexed { row, chunk ->
     val offset = String.format(java.util.Locale.ROOT, "%08X", row * 16)
@@ -229,6 +232,21 @@ class IdeViewModel(app: Application) : AndroidViewModel(app) {
     private var sshHostKeyAnswer: CompletableDeferred<Boolean>? = null
     var fileSystem by mutableStateOf<WorkspaceProjectFileSystem?>(null)
         private set
+    private var sourceFileSystem: SafProjectFileSystem? = null
+    private var sourceFileSystemTreeUri: String? = null
+    private var treeFingerprint = 0L
+    private var syncedFingerprint = 0L
+
+    /** One SAF handle per chosen folder; rebuilding it per directory made every refresh re-resolve the tree. */
+    private fun sourceFs(record: ProjectRecord): SafProjectFileSystem {
+        val cached = sourceFileSystem
+        if (cached != null && sourceFileSystemTreeUri == record.treeUri) return cached
+        return SafProjectFileSystem(getApplication(), Uri.parse(record.treeUri)).also {
+            sourceFileSystem = it
+            sourceFileSystemTreeUri = record.treeUri
+        }
+    }
+
     var folder by mutableStateOf(ProjectPath.Root)
     var entries by mutableStateOf<List<ProjectEntry>>(emptyList())
     val documents = mutableStateListOf<EditorDocument>()
@@ -275,10 +293,15 @@ class IdeViewModel(app: Application) : AndroidViewModel(app) {
             val record = project ?: return@withLock
             val fs = fileSystem ?: return@withLock
             if (busy || documents.any { it.dirty }) return@withLock
+            // Listing is cheap; the three-way sync reads every file on both sides, so it
+            // only runs when the recorded tree fingerprint actually moved.
+            refresh()
+            if (treeFingerprint == syncedFingerprint) { lastSyncError = null; return@withLock }
             try {
-                fs.synchronize(SafProjectFileSystem(getApplication(), Uri.parse(record.treeUri)))
+                fs.synchronize(sourceFs(record))
                 if (fileSystem !== fs) return@withLock
                 refresh()
+                syncedFingerprint = treeFingerprint
                 for (doc in documents.toList()) {
                     if (doc.dirty || doc.readOnly) continue
                     if (!fs.exists(doc.path)) { closeDocument(doc); continue }
@@ -430,12 +453,13 @@ class IdeViewModel(app: Application) : AndroidViewModel(app) {
         busy = true
         try {
             val workspace = WorkspaceProjectFileSystem(File(getApplication<Application>().filesDir.canonicalFile, "projects/${record.id}/work"))
-            workspace.importFrom(SafProjectFileSystem(getApplication(), Uri.parse(record.treeUri)))
+            workspace.importFrom(sourceFs(record))
             approvalPolicy.openProject(record.id)
             trustEnabled = false
             preview.close(); terminalUrls.clear()
             project = record
             fileSystem = workspace
+            syncedFingerprint = 0L
             sshWorkspaceActive = false
             folder = ProjectPath.Root
             documents.clear(); documentBackStack.clear(); selectedDocument = null; history = emptyList(); chat.clear()
@@ -446,41 +470,81 @@ class IdeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     val projectFiles = mutableStateListOf<ProjectPath>()
+
     private suspend fun listMerged(directory: ProjectPath): List<ProjectEntry> {
         if (sshWorkspaceActive) return sshFileSystem?.list(directory).orEmpty()
-        val workspaceEntries = try {
-            requireNotNull(fileSystem).list(directory)
-        } catch (_: ProjectFileNotFoundException) {
-            emptyList()
-        }
-        val sourceEntries = project?.let { record ->
-            try {
-                SafProjectFileSystem(getApplication(), Uri.parse(record.treeUri)).list(directory)
-            } catch (_: ProjectFileNotFoundException) {
-                emptyList()
-            } catch (_: ProjectAccessRevokedException) {
-                emptyList()
+        val record = project
+        return coroutineScope {
+            val workspace = async(Dispatchers.IO) {
+                try {
+                    requireNotNull(fileSystem).list(directory)
+                } catch (_: ProjectFileNotFoundException) {
+                    emptyList()
+                }
             }
-        }.orEmpty()
-        val merged = linkedMapOf<String, ProjectEntry>()
-        sourceEntries.forEach { merged[it.path.value] = it.copy(editable = false) }
-        workspaceEntries.forEach { merged[it.path.value] = it.copy(editable = true) }
-        return merged.values.sortedWith(compareByDescending<ProjectEntry> { it.isDirectory }.thenBy { it.name.lowercase() })
+            val source: Deferred<List<ProjectEntry>>? = if (record == null) null else async(Dispatchers.IO) {
+                try {
+                    sourceFs(record).list(directory)
+                } catch (_: ProjectFileNotFoundException) {
+                    emptyList()
+                } catch (_: ProjectAccessRevokedException) {
+                    emptyList()
+                }
+            }
+            val merged = linkedMapOf<String, ProjectEntry>()
+            source?.await()?.forEach { merged[it.path.value] = it.copy(editable = false) }
+            workspace.await().forEach { merged[it.path.value] = it.copy(editable = true) }
+            merged.values.sortedWith(compareByDescending<ProjectEntry> { it.isDirectory }.thenBy { it.name.lowercase() })
+        }
     }
 
+    /** Fingerprints only move the tree; content hashing stays inside synchronize. */
+    private fun mix(fingerprint: Long, value: Long): Long = 31 * fingerprint + value xor (value ushr 32)
+
+    private val ignoredTreeFolders = setOf(".git", ".notcode-staging", "node_modules", "build", ".gradle")
+
     suspend fun refresh() {
-        val fs = activeFileSystem ?: run { entries = emptyList(); projectFiles.clear(); return }
-        entries = listMerged(folder)
-        val paths = mutableListOf<ProjectPath>()
-        val pending = java.util.ArrayDeque<ProjectPath>().apply { add(ProjectPath.Root) }
-        var visited = 0
-        while (pending.isNotEmpty() && visited++ < 4000 && paths.size < 2000) {
-            for (entry in listMerged(pending.removeFirst())) {
-                if (entry.name in setOf(".git", ".notcode-staging", "node_modules", "build", ".gradle")) continue
-                if (entry.isDirectory) pending.add(entry.path) else paths.add(entry.path)
-            }
+        val fs = activeFileSystem ?: run {
+            entries = emptyList(); projectFiles.clear(); treeFingerprint = 0L; return
         }
-        projectFiles.clear(); projectFiles.addAll(paths)
+        entries = listMerged(folder)
+        val fileStates = sortedMapOf<String, ProjectEntry>()
+        val directoryCounts = sortedMapOf<String, Int>()
+        var pending = listOf(ProjectPath.Root)
+        var listed = 0
+        while (pending.isNotEmpty() && listed < MAX_TREE_DIRECTORIES && fileStates.size < MAX_TREE_FILES) {
+            val batch = pending.take(MAX_TREE_DIRECTORIES - listed)
+            listed += batch.size
+            val childrenOfBatch = mutableListOf<Pair<ProjectPath, List<ProjectEntry>>>()
+            for (chunk in batch.chunked(TREE_LISTING_PARALLELISM)) {
+                childrenOfBatch += coroutineScope {
+                    chunk.map { directory -> async(Dispatchers.IO) { directory to listMerged(directory) } }.awaitAll()
+                }
+            }
+            val next = mutableListOf<ProjectPath>()
+            for ((directory, children) in childrenOfBatch.sortedBy { it.first.value }) {
+                var relevant = 0
+                for (entry in children) {
+                    if (entry.name in ignoredTreeFolders) continue
+                    relevant++
+                    if (entry.isDirectory) next += entry.path else fileStates[entry.path.value] = entry
+                }
+                directoryCounts[directory.value] = relevant
+            }
+            pending = next
+        }
+        var fingerprint = 1125899906842597L
+        for ((name, count) in directoryCounts) {
+            fingerprint = mix(fingerprint, name.hashCode().toLong())
+            fingerprint = mix(fingerprint, count.toLong())
+        }
+        for ((name, entry) in fileStates) {
+            fingerprint = mix(fingerprint, name.hashCode().toLong())
+            fingerprint = mix(fingerprint, entry.size)
+            fingerprint = mix(fingerprint, entry.lastModifiedEpochMs)
+        }
+        treeFingerprint = fingerprint
+        projectFiles.clear(); projectFiles.addAll(fileStates.values.map { it.path })
     }
     fun browse(path: ProjectPath) = perform { folder = path; refresh() }
     fun openFile(path: ProjectPath) = perform {
@@ -506,7 +570,7 @@ class IdeViewModel(app: Application) : AndroidViewModel(app) {
                 previewInfo = "Только чтение · HEX · размер ${preview.revision.size} байт · показано $shown",
                 allowFileOperations = true)
         } else {
-            val source = SafProjectFileSystem(getApplication(), Uri.parse(requireNotNull(project).treeUri))
+            val source = sourceFs(requireNotNull(project))
             val sourceText = try {
                 source.readText(path, EDITOR_MAX_BYTES)
             } catch (_: ProjectFileNotFoundException) {
@@ -635,8 +699,9 @@ class IdeViewModel(app: Application) : AndroidViewModel(app) {
                     doc.original = content
                 }
                 check(documents.none { it.dirty }) { "Файлы изменились во время сохранения; повторите синхронизацию" }
-                val result = fs.synchronize(SafProjectFileSystem(getApplication(), Uri.parse(record.treeUri)))
+                val result = fs.synchronize(sourceFs(record))
                 refresh()
+                syncedFingerprint = treeFingerprint
                 for (doc in documents.filter { !it.dirty && !it.readOnly }) {
                     val loaded = fs.readText(doc.path, 1024 * 1024)
                     doc.text = loaded.text; doc.original = loaded.text; doc.revision = loaded.revision
@@ -1006,8 +1071,7 @@ class IdeViewModel(app: Application) : AndroidViewModel(app) {
             val remoteActive = sshWorkspaceActive
             val fs = requireNotNull(activeFileSystem) { "Сначала откройте проект или подключитесь по SSH" }
             val localAgentFs = if (remoteActive) null else {
-                val sourceFs = SafProjectFileSystem(getApplication(), Uri.parse(requireNotNull(project).treeUri))
-                AgentProjectFileSystem(requireNotNull(fileSystem), sourceFs)
+                AgentProjectFileSystem(requireNotNull(fileSystem), sourceFs(requireNotNull(project)))
             }
             val agentFs: ProjectFileSystem = localAgentFs ?: fs
             val profile = profiles.value.firstOrNull { it.id == activeProfileId.value } ?: error("Настройте провайдера во вкладке «Настройки»")
