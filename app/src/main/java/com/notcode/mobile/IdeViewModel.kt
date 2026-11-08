@@ -319,6 +319,15 @@ class IdeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    val updateRepository = preferences.updateRepository.stateIn(viewModelScope, SharingStarted.Eagerly, com.notcode.mobile.update.DEFAULT_RELEASE_REPOSITORY)
+    val autoUpdateEnabled = preferences.autoUpdateEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    var updateStatus by mutableStateOf(UpdateStatus())
+        private set
+    private val installer = com.notcode.mobile.update.ApkInstaller(getApplication())
+    private var updateTarget: com.notcode.mobile.update.UpdateTarget? = null
+    private var updateFile: java.io.File? = null
+    val installedVersionName get() = installer.installedVersionName
+
     init {
         perform {
             sshProfile = preferences.sshProfile.first()
@@ -336,14 +345,6 @@ class IdeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    val updateRepository = preferences.updateRepository.stateIn(viewModelScope, SharingStarted.Eagerly, com.notcode.mobile.update.DEFAULT_RELEASE_REPOSITORY)
-    val autoUpdateEnabled = preferences.autoUpdateEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
-    var updateStatus by mutableStateOf(UpdateStatus())
-        private set
-    private val installer = com.notcode.mobile.update.ApkInstaller(getApplication())
-    private var updateTarget: com.notcode.mobile.update.UpdateTarget? = null
-    private var updateFile: java.io.File? = null
-    val installedVersionName get() = installer.installedVersionName
 
     fun setUpdateRepository(raw: String) = perform {
         val repository = com.notcode.mobile.update.GithubReleases.normalizeRepository(raw)
