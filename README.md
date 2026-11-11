@@ -4,7 +4,7 @@
 
 Мобильная IDE для Android с ИИ-агентом: проект открывается прямо с телефона, файлы остаются у вас, агент работает в том же проекте и просит подтверждение на каждое действие.
 
-- Канал: [t.me/NotCodeAI](https://t.me/NotCodeAI) · Поддержка: [boosty.to/notcode](https://boosty.to/notcode)
+- Канал: [t.me/NotCodeAI](https://t.me/NotCodeAI) · Поддержка: [boosty.to/notcode](https://boosty.to/notcode) (поддержка делает релизы быстрее)
 
 ## Что умеет
 
