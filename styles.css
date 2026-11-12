@@ -7,7 +7,7 @@
 }
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --paper: #fafbf8;
   --white: #fff;
   --ink: #20251f;
@@ -16,19 +16,6 @@
   --line: #e4e8df;
   --green: #c4f16b;
   --green-pale: #eaf1df;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #20251f;
-    --white: #2c2c2c;
-    --ink: #fafbf8;
-    --muted: #c0c0c0;
-    --soft-muted: #a0a0a0;
-    --line: #444;
-    --green: #b0e05c;
-    --green-pale: #2f4c1a;
-  }
 }
 
 * { box-sizing: border-box; }
