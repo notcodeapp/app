@@ -7,7 +7,7 @@ object PreviewUrlPolicy {
     fun normalize(raw: String): String {
         val value = raw.trim()
         require(value.isNotEmpty() && value.length <= 8192 && value.none { it.isISOControl() }) {
-            "Enter an HTTP or HTTPS URL"
+            "Введите адрес HTTP или HTTPS"
         }
         val explicitScheme = Regex("^[A-Za-z][A-Za-z0-9+.-]*:").containsMatchIn(value)
         val localAddress = Regex("^(localhost|127\\.0\\.0\\.1|\\[::1])(?::[0-9]+)?(?:/|$)", RegexOption.IGNORE_CASE)
@@ -19,12 +19,12 @@ object PreviewUrlPolicy {
         }
         val uri = URI(candidate)
         val scheme = uri.scheme?.lowercase()
-        require(scheme == "http" || scheme == "https") { "Only HTTP and HTTPS pages are supported" }
+        require(scheme == "http" || scheme == "https") { "Поддерживаются только страницы HTTP и HTTPS" }
         require(!uri.isOpaque && !uri.host.isNullOrBlank() && uri.rawUserInfo == null) {
-            "Invalid URL or embedded credentials"
+            "Неверный адрес или логин с паролем внутри ссылки"
         }
-        require(uri.port == -1 || uri.port in 1..65535) { "Invalid port" }
-        require(scheme != "http" || isLoopback(uri.host)) { "Remote pages require HTTPS; HTTP is allowed only on loopback" }
+        require(uri.port == -1 || uri.port in 1..65535) { "Неверный порт" }
+        require(scheme != "http" || isLoopback(uri.host)) { "Удалённые страницы требуют HTTPS; HTTP разрешён только для localhost" }
         return uri.toASCIIString()
     }
 

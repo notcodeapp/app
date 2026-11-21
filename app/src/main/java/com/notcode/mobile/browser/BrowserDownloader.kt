@@ -55,22 +55,22 @@ object BrowserDownloader {
                     val candidate = client.newCall(builder.build()).execute()
                     if (candidate.code in setOf(301, 302, 303, 307, 308)) {
                         val location = candidate.header("Location")
-                        val next = candidate.request.url.resolve(location ?: throw IOException("Invalid redirect"))
+                        val next = candidate.request.url.resolve(location ?: throw IOException("Некорректное перенаправление"))
                         candidate.close()
-                        val target = next?.toString() ?: throw IOException("Invalid redirect")
+                        val target = next?.toString() ?: throw IOException("Некорректное перенаправление")
                         // Every hop is revalidated: no downgrade to file/content or remote cleartext.
-                        require(PreviewUrlPolicy.allows(target)) { "Redirect to an unsupported or insecure URL was blocked" }
+                        require(PreviewUrlPolicy.allows(target)) { "Перенаправление на неподдерживаемый или небезопасный адрес заблокировано" }
                         current = target
                         continue
                     }
                     response = candidate
                     break
                 }
-                val result = response ?: throw IOException("Too many redirects")
+                val result = response ?: throw IOException("Слишком много перенаправлений")
                 result.use {
                     if (!it.isSuccessful) throw IOException("HTTP ${it.code}")
-                    val body = it.body ?: throw IOException("Empty response")
-                    if (body.contentLength() > MAX_BYTES) throw IOException("File exceeds the 200 MiB limit")
+                    val body = it.body ?: throw IOException("Пустой ответ сервера")
+                    if (body.contentLength() > MAX_BYTES) throw IOException("Файл больше лимита 200 МиБ")
                     var total = 0L
                     body.byteStream().use { input ->
                         val buffer = ByteArray(64 * 1024)
@@ -79,7 +79,7 @@ object BrowserDownloader {
                             val read = input.read(buffer)
                             if (read < 0) break
                             total += read
-                            if (total > MAX_BYTES) throw IOException("File exceeds the 200 MiB limit")
+                            if (total > MAX_BYTES) throw IOException("Файл больше лимита 200 МиБ")
                             output.write(buffer, 0, read)
                         }
                     }

@@ -39,7 +39,7 @@ class BrowserDownloadTest {
                 BrowserDownloader.save(DownloadRequest("$base/big.bin", "big.bin", "", -1, null), null, ByteArrayOutputStream())
             }.exceptionOrNull()
             assertNotNull(failure)
-            assertTrue(failure!!.message!!.contains("200 MiB"))
+            assertTrue(failure!!.message!!.contains("200 МиБ"))
         }
     }
 

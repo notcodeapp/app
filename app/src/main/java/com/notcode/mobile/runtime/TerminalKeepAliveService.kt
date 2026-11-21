@@ -18,7 +18,7 @@ class TerminalKeepAliveService : Service() {
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "Фоновая работа", NotificationManager.IMPORTANCE_LOW))
         val notification = NotificationCompat.Builder(this, CHANNEL)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("NotCode работает в фоне")
             .setContentText("Терминал и агент продолжают работу")
             .setOngoing(true)

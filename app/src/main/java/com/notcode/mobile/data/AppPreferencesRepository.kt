@@ -26,6 +26,20 @@ class AppPreferencesRepository(
     private val json: Json,
 ) {
     private val dataStore = context.notCodeDataStore
+    private val desktopConnectionKey = stringPreferencesKey("desktop_connection_v1")
+    val desktopConnection: Flow<com.notcode.mobile.desktop.DesktopConnection?> = dataStore.data.catch { error ->
+        if (error is IOException) emit(emptyPreferences()) else throw error
+    }.map { values ->
+        values[desktopConnectionKey]?.let { encoded ->
+            runCatching { json.decodeFromString(com.notcode.mobile.desktop.DesktopConnection.serializer(), encoded) }.getOrNull()
+        }
+    }
+    suspend fun saveDesktopConnection(connection: com.notcode.mobile.desktop.DesktopConnection?) {
+        dataStore.edit { values ->
+            if (connection == null) values.remove(desktopConnectionKey)
+            else values[desktopConnectionKey] = json.encodeToString(com.notcode.mobile.desktop.DesktopConnection.serializer(), connection)
+        }
+    }
 
     private object Keys {
         val profiles = stringPreferencesKey("provider_profiles_v1")
@@ -38,6 +52,7 @@ class AppPreferencesRepository(
         val updateRepository = stringPreferencesKey("update_repository")
         val autoUpdateEnabled = booleanPreferencesKey("auto_update_enabled")
         val lastUpdateCheckAt = longPreferencesKey("last_update_check_at")
+        val updateSnoozeUntil = longPreferencesKey("update_snooze_until")
     }
 
     private val safeData: Flow<Preferences> = dataStore.data.catch { error ->
@@ -61,7 +76,7 @@ class AppPreferencesRepository(
         it[Keys.agentPrivacyAccepted] ?: false
     }
 
-    val themeMode: Flow<String> = safeData.map { it[Keys.themeMode] ?: "system" }
+    val themeMode: Flow<String> = safeData.map { it[Keys.themeMode] ?: "dynamic" }
 
     val sshProfile: Flow<SshConnectionProfile?> = safeData.map { preferences ->
         preferences[Keys.sshProfile]?.let { runCatching { json.decodeFromString(SshConnectionProfile.serializer(), it) }.getOrNull() }
@@ -79,6 +94,8 @@ class AppPreferencesRepository(
 
     val lastUpdateCheckAt: Flow<Long> = safeData.map { it[Keys.lastUpdateCheckAt] ?: 0L }
 
+    val updateSnoozeUntil: Flow<Long> = safeData.map { it[Keys.updateSnoozeUntil] ?: 0L }
+
     suspend fun setUpdateRepository(repository: String) {
         dataStore.edit { it[Keys.updateRepository] = repository }
     }
@@ -91,8 +108,12 @@ class AppPreferencesRepository(
         dataStore.edit { it[Keys.lastUpdateCheckAt] = epochMs }
     }
 
+    suspend fun setUpdateSnoozeUntil(epochMs: Long) {
+        dataStore.edit { it[Keys.updateSnoozeUntil] = epochMs }
+    }
+
     suspend fun setThemeMode(mode: String) {
-        require(mode in setOf("system", "light", "dark"))
+        require(mode in setOf("system", "dynamic", "light", "dark"))
         dataStore.edit { it[Keys.themeMode] = mode }
     }
 

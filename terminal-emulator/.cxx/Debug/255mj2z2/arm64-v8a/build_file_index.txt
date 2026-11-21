@@ -1,0 +1,1 @@
+C:\Users\notkovvik\Documents\Проект по умолчанию\NotCode\android-app\terminal-emulator\src\main\jni\CMakeLists.txt

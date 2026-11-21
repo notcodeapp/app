@@ -178,7 +178,7 @@ class WorkspacePathTest {
         assertEquals("raced", source.contents["a"])
     }
 
-    @Test fun revertedChangesNeedNoExportAndExportHonorsLimits() = runBlocking {
+    @Test fun revertedChangesNeedNoExportAndLargeExportIsNotCapped() = runBlocking {
         val source = FakeFs()
         source.put("a", "original")
         val fs = workspace()
@@ -187,8 +187,9 @@ class WorkspacePathTest {
         fs.writeText(path("a"), "original")
         assertEquals(0, fs.exportTo(source))
         repeat(2000) { File(fs.directory, "new$it").writeText("") }
-        fails<ProjectFileException> { fs.exportTo(source) }
-        assertTrue(source.writes.isEmpty())
+        assertEquals(2000, fs.exportTo(source))
+        assertEquals(2000, source.writes.size)
+        assertTrue(source.contents.getValue("new1999").isEmpty())
     }
 
     @Test fun refusesUnmarkedDirtyWorkspaceAndCorruptManifest() = runBlocking {
@@ -201,17 +202,24 @@ class WorkspacePathTest {
         assertEquals("keep", fs.readText(path("dirty"), 100).text)
     }
 
-    @Test fun importLimitsFilesAndBytesBeforeCopying() = runBlocking {
+    @Test fun importsProjectLargerThanLegacyFileCap() = runBlocking {
         val source = FakeFs()
-        repeat(2001) { source.put("file$it", "") }
+        repeat(2001) { source.put("nested/file$it", "x") }
         val fs = workspace()
-        fails<ProjectFileException> { fs.importFrom(source) }
-        assertTrue(fs.directory.listFiles()!!.isEmpty())
-        source.contents.clear()
-        source.revisions.clear()
+        var reported = 0
+        fs.importFrom(source) { reported = it }
+        assertEquals(2001, fs.directory.walkTopDown().count { it.isFile })
+        assertTrue(File(temporary.root, "workspace-sync.json").exists())
+        assertTrue(reported > 0)
+    }
+
+    @Test fun importAbortsOnByteLimitWithoutPartialWorkspace() = runBlocking {
+        val source = FakeFs()
         source.put("huge", "a")
         source.reportedReadSize = 120L * 1024 * 1024 + 1
+        val fs = workspace()
         fails<ProjectFileTooLargeException> { fs.importFrom(source) }
+        assertTrue(fs.directory.walkTopDown().count { it.isFile } == 0)
         assertFalse(File(temporary.root, "workspace-sync.json").exists())
     }
 

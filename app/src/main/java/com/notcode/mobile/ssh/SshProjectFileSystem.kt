@@ -55,7 +55,7 @@ class SshProjectFileSystem private constructor(
     }
 
     override suspend fun readPreview(path: ProjectPath, maxBytes: Long): FilePreviewDocument = ioLocked {
-        require(maxBytes in 0..MAX_PREVIEW_BYTES) { "Preview limit must be between 0 and 4 MiB" }
+        require(maxBytes in 0..MAX_PREVIEW_BYTES) { "Лимит предпросмотра должен быть от 0 до 4 МиБ" }
         val remote = resolveExisting(path)
         val attrs = sftp.lstat(remote)
         require(!attrs.isDir && !attrs.isLink) { "Это не обычный файл: ${path.value}" }
@@ -66,9 +66,9 @@ class SshProjectFileSystem private constructor(
     }
 
     override suspend fun writeText(path: ProjectPath, content: String, expectedRevision: FileRevision?): FileRevision = ioLocked {
-        require(!path.isRoot) { "Cannot write the project root" }
+        require(!path.isRoot) { "Нельзя записать в корень проекта" }
         val bytes = content.toByteArray(Charsets.UTF_8)
-        require(bytes.size <= MAX_FILE_BYTES) { "File exceeds the 16 MiB SSH write limit" }
+        require(bytes.size <= MAX_FILE_BYTES) { "Файл больше лимита записи по SSH (16 МиБ)" }
         val remote = resolveForWrite(path)
         val before = attributesIfPresent(remote)
         if (before?.isLink == true) throw ProjectFileException("Запись по символическим ссылкам запрещена: ${path.value}")
@@ -98,7 +98,7 @@ class SshProjectFileSystem private constructor(
     }
 
     override suspend fun renameFile(path: ProjectPath, target: ProjectPath, expectedRevision: FileRevision?): FileRevision = ioLocked {
-        require(!path.isRoot && !target.isRoot) { "Cannot rename project root" }
+        require(!path.isRoot && !target.isRoot) { "Нельзя переименовать корень проекта" }
         val source = resolveExisting(path)
         val attrs = sftp.lstat(source)
         require(!attrs.isDir && !attrs.isLink) { "Можно переименовать только обычный файл" }
@@ -110,7 +110,7 @@ class SshProjectFileSystem private constructor(
     }
 
     override suspend fun deleteFile(path: ProjectPath, expectedRevision: FileRevision?) = ioLocked {
-        require(!path.isRoot) { "Cannot delete project root" }
+        require(!path.isRoot) { "Нельзя удалить корень проекта" }
         val remote = resolveExisting(path)
         val attrs = sftp.lstat(remote)
         require(!attrs.isDir && !attrs.isLink) { "Можно удалить только обычный файл" }

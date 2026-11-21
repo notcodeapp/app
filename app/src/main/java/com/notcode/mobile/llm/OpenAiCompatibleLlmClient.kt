@@ -201,41 +201,22 @@ class OpenAiCompatibleLlmClient(
         }
     }
 
-    suspend fun fetchModels(baseUrl: String, apiKey: String?, noAuth: Boolean): List<String> {
+    suspend fun fetchModels(baseUrl: String, apiKey: String?, noAuth: Boolean): DiscoveredModels {
         val profile = ProviderProfile(
             baseUrl = baseUrl.trim().trimEnd('/'),
             modelId = "_fetch_models",
         )
         val authorization = apiKey?.trim()?.takeIf { it.isNotEmpty() && !noAuth }
             ?.let { "Bearer $it" }
-        val request = buildRequest(
-            target = ProviderTarget(profile, authorization),
-            endpoint = endpoint(profile, "models"),
-            method = "GET",
-            body = null,
-            accept = "application/json",
-        )
-
-        return http.newCall(request).awaitResponse().use { response ->
-            if (!response.isSuccessful) throw response.toProviderException()
-            val body = response.body ?: throw ProviderProtocolException("Provider returned an empty response")
-            val source = body.source()
-            if (source.request(4L * 1024 * 1024 + 1)) {
-                throw ProviderProtocolException("Models response exceeded 4 MiB")
-            }
-            val root = runCatching { json.parseToJsonElement(source.readUtf8()).jsonObject }
-                .getOrElse { throw ProviderProtocolException("Provider returned invalid models JSON", it) }
-            val entries = (root["data"] as? JsonArray) ?: (root["models"] as? JsonArray)
-            val models = entries.orEmpty().mapNotNull { element ->
-                val item = element as? JsonObject ?: return@mapNotNull null
-                ((item["id"] ?: item["name"]) as? JsonPrimitive)?.contentOrNull
-                    ?.trim()
-                    ?.takeIf { it.isNotEmpty() }
-            }.distinct()
-            if (models.isEmpty()) {
-                throw ProviderProtocolException("Provider returned no model IDs")
-            }
-            models
+        return ModelsDiscovery.fetch(validateBaseUrl(profile), json) { url ->
+            val request = buildRequest(
+                target = ProviderTarget(profile, authorization),
+                endpoint = url,
+                method = "GET",
+                body = null,
+                accept = "application/json",
+            )
+            http.newCall(request).awaitResponse()
         }
     }
 

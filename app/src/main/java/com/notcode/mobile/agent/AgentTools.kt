@@ -18,6 +18,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.util.ArrayDeque
 import java.nio.ByteBuffer
@@ -31,6 +32,34 @@ data class WriteProposal(
     val operation: String = "write",
     val targetPath: ProjectPath? = null,
 )
+
+/// Один шаг чеклиста агента (инструмент update_plan): рендерится отдельной
+/// карточкой в чате, в текст сообщений не попадает.
+@kotlinx.serialization.Serializable
+data class PlanStep(val title: String, val status: String = "pending") {
+    companion object {
+        val STATUSES = setOf("pending", "in_progress", "done")
+        const val MAX_STEPS = 32
+        const val MAX_TITLE = 200
+
+        /// Разбор и нормализация шагов из аргументов инструмента.
+        fun normalize(arguments: JsonObject): List<PlanStep> {
+            val raw = arguments["steps"] as? JsonArray ?: throw IllegalArgumentException("update_plan: нужен массив steps")
+            val steps = raw.asSequence()
+                .mapNotNull { it as? JsonObject }
+                .mapNotNull { step ->
+                    val title = step["title"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+                    if (title.isEmpty()) return@mapNotNull null
+                    val status = step["status"]?.jsonPrimitive?.contentOrNull?.takeIf { it in STATUSES } ?: "pending"
+                    PlanStep(title.take(MAX_TITLE), status)
+                }
+                .take(MAX_STEPS)
+                .toList()
+            if (steps.isEmpty()) throw IllegalArgumentException("update_plan: список шагов пуст")
+            return steps
+        }
+    }
+}
 
 fun interface WriteApprovalGateway {
     suspend fun approve(proposal: WriteProposal): Boolean
@@ -425,9 +454,41 @@ class ToolExecutor(
         const val STAGE_FILE_FOR_TERMINAL = "stage_file_for_terminal"
         const val GIT = "git"
         const val DELEGATE_ANALYSIS = "delegate_analysis"
+        const val UPDATE_PLAN = "update_plan"
         const val MAX_TOOL_NAME_CHARS = 128
         const val MAX_TOOL_ARGUMENT_BYTES = 512 * 1024
         private const val MAX_AGENT_PREVIEW_BYTES = 4096L
+
+        /// Определение инструмента плана: массив шагов {title, status}.
+        val updatePlanDefinition: LlmTool = LlmTool(
+            name = UPDATE_PLAN,
+            description = "Maintain a visible step-by-step plan for the current task. The user sees the checklist; plan changes are NOT chat text. Call it first with all planned steps (status pending, first step in_progress), then again whenever a step starts or finishes with status done. Keep titles short. Send the full list every time.",
+            parameters = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("steps", buildJsonObject {
+                        put("type", "array")
+                        put("items", buildJsonObject {
+                            put("type", "object")
+                            put("properties", buildJsonObject {
+                                put("title", buildJsonObject { put("type", "string") })
+                                put("status", buildJsonObject {
+                                    put("type", "string")
+                                    put("enum", buildJsonArray {
+                                        listOf("pending", "in_progress", "done").forEach { add(JsonPrimitive(it)) }
+                                    })
+                                })
+                            })
+                            put("required", buildJsonArray {
+                                listOf("title", "status").forEach { add(JsonPrimitive(it)) }
+                            })
+                        })
+                    })
+                })
+                put("required", buildJsonArray { add(JsonPrimitive("steps")) })
+                put("additionalProperties", false)
+            },
+        )
 
         // Runtime callbacks enforce approval and local-only execution; these are opt-in schemas.
         val developmentDefinitions: List<LlmTool> = listOf(

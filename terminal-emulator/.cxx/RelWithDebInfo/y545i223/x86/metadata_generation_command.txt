@@ -1,0 +1,19 @@
+                        -HX:\android-app\terminal-emulator\src\main\jni
+-DCMAKE_SYSTEM_NAME=Android
+-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+-DCMAKE_SYSTEM_VERSION=31
+-DANDROID_PLATFORM=android-31
+-DANDROID_ABI=x86
+-DCMAKE_ANDROID_ARCH_ABI=x86
+-DANDROID_NDK=X:\.tools\android-sdk\ndk\27.0.12077973
+-DCMAKE_ANDROID_NDK=X:\.tools\android-sdk\ndk\27.0.12077973
+-DCMAKE_TOOLCHAIN_FILE=X:\.tools\android-sdk\ndk\27.0.12077973\build\cmake\android.toolchain.cmake
+-DCMAKE_MAKE_PROGRAM=X:\.tools\android-sdk\cmake\3.22.1\bin\ninja.exe
+-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=X:\android-app\terminal-emulator\build\intermediates\cxx\RelWithDebInfo\y545i223\obj\x86
+-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=X:\android-app\terminal-emulator\build\intermediates\cxx\RelWithDebInfo\y545i223\obj\x86
+-DCMAKE_BUILD_TYPE=RelWithDebInfo
+-BX:\android-app\terminal-emulator\.cxx\RelWithDebInfo\y545i223\x86
+-GNinja
+-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON
+                        Build command args: []
+                        Version: 2

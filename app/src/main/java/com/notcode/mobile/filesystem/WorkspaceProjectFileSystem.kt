@@ -201,7 +201,7 @@ class WorkspaceProjectFileSystem(val directory: File) : ProjectFileSystem {
     }
 
     /** Initial import only. An existing marker makes this a no-op, including for dirty files. */
-    suspend fun importFrom(source: ProjectFileSystem) = io {
+    suspend fun importFrom(source: ProjectFileSystem, onProgress: (Int) -> Unit = {}) = io {
         require(source !== this) { "Cannot import a workspace from itself" }
         if (loadManifest() != null) return@io
         ensureRoot()
@@ -209,39 +209,62 @@ class WorkspaceProjectFileSystem(val directory: File) : ProjectFileSystem {
         if (root.listFiles()?.isNotEmpty() != false) {
             throw ProjectFileException("Initial import requires an empty workspace")
         }
-        val pending = mutableListOf<TextDocument>()
-        var bytes = 0L
-        walk(source) { entry ->
-            if (source is SafProjectFileSystem) {
-                val preview = source.readPreview(entry.path, 4096)
-                val binary = try { looksBinary(preview.bytes) } finally { preview.bytes.fill(0) }
-                if (binary) return@walk
-            }
-            val document = try {
-                source.readText(entry.path, MAX_BYTES - bytes)
-            } catch (_: ProjectBinaryFileException) {
-                // Keep the source tree as the authority for opaque files. The IDE can
-                // still show them through a bounded, read-only preview.
-                return@walk
-            } catch (tooLarge: ProjectFileTooLargeException) {
-                val preview = try {
-                    source.readPreview(entry.path, 4096)
-                } catch (_: ProjectFileException) {
-                    throw tooLarge
-                }
-                val binary = try { looksBinary(preview.bytes) } finally { preview.bytes.fill(0) }
-                if (binary) return@walk else throw tooLarge
-            }
-            bytes += maxOf(document.revision.size, document.text.toByteArray(Charsets.UTF_8).size.toLong())
-            if (bytes > MAX_BYTES) throw ProjectFileTooLargeException(entry.path, MAX_BYTES)
-            pending += document
-        }
         val baseline = linkedMapOf<String, Baseline>()
-        for (document in pending) {
-            write(document.path, document.text, null)
-            baseline[document.path.value] = Baseline(document.revision, hash(document.text))
+        var bytes = 0L
+        var copied = 0
+        // Каждый файл сразу уходит на диск, а в конец обхода staging одним move
+        // публикуется в рабочем каталоге. Иначе импорт держит весь проект в памяти,
+        // ничего не пишет до самого конца, и оборванная загрузка оставляет половину
+        // рабочего каталога без манифеста.
+        val staging = File(root, IMPORT_STAGING_DIRECTORY)
+        try {
+            staging.mkdirs()
+            walk(source) { entry ->
+                if (source is SafProjectFileSystem) {
+                    val preview = source.readPreview(entry.path, 4096)
+                    val binary = try { looksBinary(preview.bytes) } finally { preview.bytes.fill(0) }
+                    if (binary) return@walk
+                }
+                val document = try {
+                    source.readText(entry.path, MAX_BYTES - bytes)
+                } catch (_: ProjectBinaryFileException) {
+                    // Keep the source tree as the authority for opaque files. The IDE can
+                    // still show them through a bounded, read-only preview.
+                    return@walk
+                } catch (tooLarge: ProjectFileTooLargeException) {
+                    val preview = try {
+                        source.readPreview(entry.path, 4096)
+                    } catch (_: ProjectFileException) {
+                        throw tooLarge
+                    }
+                    val binary = try { looksBinary(preview.bytes) } finally { preview.bytes.fill(0) }
+                    if (binary) return@walk else throw tooLarge
+                }
+                val content = document.text.toByteArray(Charsets.UTF_8)
+                bytes += maxOf(document.revision.size, content.size.toLong())
+                if (bytes > MAX_BYTES) throw ProjectFileTooLargeException(entry.path, MAX_BYTES)
+                val staged = File(staging, document.path.value)
+                if (!staged.parentFile!!.isDirectory && !staged.parentFile!!.mkdirs()) {
+                    throw ProjectFileException("Cannot create import staging folder")
+                }
+                atomicWrite(staged, content)
+                baseline[document.path.value] = Baseline(document.revision, hash(document.text))
+                if (++copied % IMPORT_PROGRESS_STEP == 0) onProgress(copied)
+            }
+            publishStagedImport(staging)
+            saveManifest(baseline)
+            onProgress(copied)
+        } finally {
+            staging.deleteRecursively()
         }
-        saveManifest(baseline)
+    }
+
+    private fun publishStagedImport(staging: File) {
+        // Рабочий каталог пуст по проверке выше, поэтому переносим содержимое staging
+        // целиком: каталоги двигаются одной операцией вместо обхода всех файлов.
+        staging.listFiles()?.forEach { child ->
+            Files.move(child.toPath(), File(root, child.name).toPath(), StandardCopyOption.ATOMIC_MOVE)
+        }
     }
 
     /** Writes only local changes; never deletes remote files. Returns the number written. */
@@ -351,7 +374,6 @@ class WorkspaceProjectFileSystem(val directory: File) : ProjectFileSystem {
             }
         }
         val names = (baseline.keys + local.keys + remote.keys).toSortedSet()
-        if (names.size > MAX_FILES) throw ProjectFileException("Project exceeds $MAX_FILES files")
         data class Transfer(val document: TextDocument, val previous: TextDocument?)
         val uploads = mutableListOf<Transfer>()
         val downloads = mutableListOf<Transfer>()
@@ -599,7 +621,6 @@ class WorkspaceProjectFileSystem(val directory: File) : ProjectFileSystem {
         val folders = java.util.ArrayDeque<ProjectPath>()
         folders.add(ProjectPath.Root)
         val seen = hashSetOf<String>()
-        var files = 0
         while (folders.isNotEmpty()) {
             val parent = folders.removeFirst()
             val children = if (source === this) entries(parent) else source.list(parent)
@@ -610,11 +631,9 @@ class WorkspaceProjectFileSystem(val directory: File) : ProjectFileSystem {
                 resolve(entry.path)
                 if (entry.name in IGNORED) continue
                 if (!seen.add(entry.path.value)) throw ProjectFileException("Duplicate source entry")
-                if (seen.size > 20000) throw ProjectFileException("Too many project entries")
-                if (entry.isDirectory) folders.add(entry.path) else {
-                    if (++files > MAX_FILES) throw ProjectFileException("Project exceeds $MAX_FILES files")
-                    visit(entry)
-                }
+                // Ограничение не про размер проекта, а про зацикливание обхода.
+                if (seen.size > MAX_WALK_ENTRIES) throw ProjectFileException("Project tree is too deep or looping")
+                if (entry.isDirectory) folders.add(entry.path) else visit(entry)
             }
         }
     }
@@ -641,7 +660,7 @@ class WorkspaceProjectFileSystem(val directory: File) : ProjectFileSystem {
             }
             val result = Manifest()
             val items = data.getValue("files").jsonArray
-            require(items.size <= MAX_FILES)
+            require(items.size <= MAX_WALK_ENTRIES)
             for (item in items) {
                 val obj = item.jsonObject
                 val path = ProjectPath.parse(obj.getValue("path").jsonPrimitive.content)
@@ -655,7 +674,7 @@ class WorkspaceProjectFileSystem(val directory: File) : ProjectFileSystem {
                 )
             }
             val tombstones = data["tombstones"]?.jsonArray ?: JsonArray(emptyList())
-            require(tombstones.size <= MAX_FILES)
+            require(tombstones.size <= MAX_WALK_ENTRIES)
             for (item in tombstones) {
                 val path = ProjectPath.parse(item.jsonPrimitive.content)
                 require(!path.isRoot && path.value in result && result.tombstones.add(path.value))
@@ -690,12 +709,14 @@ class WorkspaceProjectFileSystem(val directory: File) : ProjectFileSystem {
     }
 
     companion object {
-        private const val MAX_FILES = 2000
         private const val MAX_BYTES = 120L * 1024 * 1024
         private const val MAX_PREVIEW_BYTES = 4L * 1024 * 1024
+        private const val MAX_WALK_ENTRIES = 100_000
+        private const val IMPORT_PROGRESS_STEP = 25
         const val ATTACHMENTS_DIRECTORY = ".notcode-attachments"
-        val INTERNAL_FOLDERS = setOf(".notcode-staging", ATTACHMENTS_DIRECTORY)
-        private val IGNORED = setOf(".git", ".gradle", ".notcode-staging", ATTACHMENTS_DIRECTORY, "node_modules", "build")
+        private const val IMPORT_STAGING_DIRECTORY = ".notcode-staging"
+        val INTERNAL_FOLDERS = setOf(IMPORT_STAGING_DIRECTORY, ATTACHMENTS_DIRECTORY)
+        private val IGNORED = setOf(".git", ".gradle", IMPORT_STAGING_DIRECTORY, ATTACHMENTS_DIRECTORY, "node_modules", "build")
         private val locks = ConcurrentHashMap<String, Mutex>()
         private fun hash(text: String): String = hash(text.toByteArray(Charsets.UTF_8))
         private fun hash(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")

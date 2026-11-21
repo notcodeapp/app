@@ -1,0 +1,3 @@
+C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/.cxx/Debug/255mj2z2/arm64-v8a/CMakeFiles/termux.dir
+C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/.cxx/Debug/255mj2z2/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/.cxx/Debug/255mj2z2/arm64-v8a/CMakeFiles/rebuild_cache.dir

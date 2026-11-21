@@ -1,0 +1,7 @@
+[
+{
+  "directory": "C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/.cxx/Debug/255mj2z2/arm64-v8a",
+  "command": "C:\\Users\\NOTKOV~1\\DOCUME~1\\4E68~1\\NotCode\\.tools\\android-sdk\\ndk\\27.0.12077973\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang.exe --target=aarch64-none-linux-android31 --sysroot=\"C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/.tools/android-sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/windows-x86_64/sysroot\" -Dtermux_EXPORTS -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D__BIONIC_NO_PAGE_SIZE_MACRO -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -fno-limit-debug-info  -fPIC -Wall -Wextra -Werror -Os -std=gnu11 -o CMakeFiles\\termux.dir\\termux.c.o -c \"C:\\Users\\notkovvik\\Documents\\Проект по умолчанию\\NotCode\\android-app\\terminal-emulator\\src\\main\\jni\\termux.c\"",
+  "file": "C:\\Users\\notkovvik\\Documents\\Проект по умолчанию\\NotCode\\android-app\\terminal-emulator\\src\\main\\jni\\termux.c"
+}
+]

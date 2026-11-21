@@ -6,6 +6,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
+    id("com.google.gms.google-services")
 }
 
 // Signing material lives outside the source tree and is never published.
@@ -28,8 +29,8 @@ android {
         // системного предупреждения «built for an older version of Android» (минимум 28),
         // поэтому ниже опускать смысла нет.
         targetSdk = 28
-        versionCode = 22
-        versionName = "1.2.5"
+        versionCode = 24
+        versionName = "1.2.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -108,7 +109,10 @@ dependencies {
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
+    implementation("com.google.firebase:firebase-messaging:24.1.2")
     implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.browser:browser:1.8.0")
+    implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("androidx.activity:activity-compose:1.10.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
@@ -135,6 +139,15 @@ dependencies {
     implementation("org.jsoup:jsoup:1.18.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
+    implementation("org.nanohttpd:nanohttpd-websocket:2.3.1")
+
+    val cameraVersion = "1.4.2"
+    implementation("androidx.camera:camera-core:$cameraVersion")
+    implementation("androidx.camera:camera-camera2:$cameraVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraVersion")
+    implementation("androidx.camera:camera-view:$cameraVersion")
+    implementation("com.google.zxing:core:3.5.3")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")

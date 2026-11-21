@@ -1,0 +1,47 @@
+# ninja log v5
+1	127	8158635159964698	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+127	195	8158635160629446	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+1	124	8158637218130275	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+124	202	8158637218909029	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+1	110	8158646079474152	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+110	172	8158646080078738	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+1	98	8158648375950032	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+99	164	8158648376595728	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+1	100	8158649528927648	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+101	172	8158649529616898	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+0	90	8158650070639874	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+91	150	8158650071229327	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+1	91	8158662468211221	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+91	160	8158662468883581	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+1	91	8158665624958460	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+91	154	8158665625584372	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+0	92	8158672411015156	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+93	152	8158672411605309	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+1	142	8160941520385600	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+143	226	8160941521200126	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+1	163	8160955420315076	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+163	250	8160955421165284	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+1	123	8160957581282243	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+123	194	8160957581967240	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+2	129	8160965035571160	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+129	205	8160965036292794	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+0	113	8161889619454310	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+114	184	8161889620135035	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+2	133	8161890643589857	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+133	207	8161890644334449	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+1	115	8161890933507151	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+115	186	8161890934205401	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+1	115	8161891887609734	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+115	189	8161891888342181	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+1	170	8162088314829623	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+170	273	8162088315862065	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+0	149	8162634284498863	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+149	225	8162634285241095	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+1	102	8162635511003809	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+102	177	8162635511755940	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+1	125	8162636512605371	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+125	215	8162636513476623	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+1	122	8162639511073024	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+122	211	8162639511923643	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337
+3	190	8162695495074360	CMakeFiles/termux.dir/termux.c.o	295c08eb2905a1b9
+191	296	8162695496112579	C:/Users/notkovvik/Documents/Проект по умолчанию/NotCode/android-app/terminal-emulator/build/intermediates/cxx/Debug/255mj2z2/obj/x86/libtermux.so	784b293ae96e4337

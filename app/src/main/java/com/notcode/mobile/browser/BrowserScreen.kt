@@ -140,20 +140,20 @@ fun BrowserScreen(controller: PreviewController, onSavePage: (String, String) ->
                         menu = false
                         val source = webView.url
                         if (source == null || !PreviewUrlPolicy.allows(source)) {
-                            controller.reportError("No supported page to save")
+                            controller.reportError("Эту страницу нельзя сохранить: нужен адрес http(s)")
                         } else {
                             webView.evaluateJavascript(
                                 "(function(){var s=document.documentElement.outerHTML;return s.length>2097152?null:s;})()"
                             ) { encoded ->
                                 runCatching {
-                                    require(webView.url == source) { "Page changed while saving" }
+                                    require(webView.url == source) { "Страница изменилась во время сохранения" }
                                     val html = Json.parseToJsonElement(encoded).jsonPrimitive.content
                                     require(encoded != "null" && html.toByteArray(Charsets.UTF_8).size <= MAX_HTML_BYTES) {
-                                        "Page HTML exceeds 2 MiB or is unavailable"
+                                        "HTML страницы больше 2 МиБ или недоступен"
                                     }
                                     // Only a user-triggered snapshot; caller must confirm/save via its VM.
                                     saveCallback(webView.title.orEmpty().take(512), html)
-                                }.onFailure { controller.reportError(it.message ?: "Cannot capture page HTML") }
+                                }.onFailure { controller.reportError(it.message ?: "Не удалось получить HTML страницы") }
                             }
                         }
                     })
@@ -165,7 +165,7 @@ fun BrowserScreen(controller: PreviewController, onSavePage: (String, String) ->
                                 addCategory(Intent.CATEGORY_BROWSABLE)
                             })
                         }.onFailure {
-                            controller.reportError(if (it is ActivityNotFoundException) "No browser is available" else it.message ?: "Cannot open browser")
+                            controller.reportError(if (it is ActivityNotFoundException) "На телефоне не найден браузер" else it.message ?: "Не удалось открыть браузер")
                         }
                     })
                 }
@@ -209,13 +209,21 @@ internal fun createPreviewWebView(
             setGeolocationEnabled(false)
             mediaPlaybackRequiresUserGesture = true
             safeBrowsingEnabled = true
-            cacheMode = WebSettings.LOAD_NO_CACHE
+            // Страница должна вписываться в экран, иначе её приходится тащить по горизонтали.
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            setSupportZoom(true)
+            builtInZoomControls = true
+            displayZoomControls = false
+            // LOAD_NO_CACHE перечитывал каждую картинку при прокрутке. Локальный сервер
+            // предпросмотра и так отдаёт Cache-Control: no-store, так что свежесть не теряется.
+            cacheMode = WebSettings.LOAD_DEFAULT
         }
         // Never addJavascriptInterface: page scripts cannot invoke app/model actions.
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
         setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
             if (!PreviewUrlPolicy.allows(url)) {
-                controller.reportError("Blocked unsupported or insecure download URL")
+                controller.reportError("Загрузка заблокирована: неподдерживаемый или небезопасный адрес")
             } else {
                 onDownload(DownloadRequest(
                     url,
@@ -229,14 +237,14 @@ internal fun createPreviewWebView(
         webViewClient = object : WebViewClient() {
             private fun blocked(url: String): Boolean {
                 val deny = !PreviewUrlPolicy.allows(url)
-                if (deny) controller.reportError("Blocked unsupported or insecure URL")
+                if (deny) controller.reportError("Переход заблокирован: неподдерживаемый или небезопасный адрес")
                 return deny
             }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = blocked(request.url.toString())
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = blocked(url)
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                 if (!PreviewUrlPolicy.allows(request.url.toString())) {
-                    controller.reportError("Blocked unsupported or insecure resource")
+                    controller.reportError("Ресурс заблокирован: неподдерживаемый или небезопасный адрес")
                     WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), ByteArrayInputStream(ByteArray(0)))
                 } else null
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
@@ -245,28 +253,28 @@ internal fun createPreviewWebView(
             override fun onPageFinished(view: WebView, url: String?) { controller.page(url, view.title) }
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
                 handler.cancel()
-                controller.reportError("TLS certificate error; connection blocked")
+                controller.reportError("Ошибка сертификата TLS. Соединение заблокировано")
             }
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
-                if (request.isForMainFrame) controller.reportError("Page failed to load: ${error.description}")
+                if (request.isForMainFrame) controller.reportError("Не удалось загрузить страницу: ${error.description}")
             }
             override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
                 if (request.isForMainFrame) controller.reportError("HTTP ${response.statusCode}")
             }
         }
         webChromeClient = object : WebChromeClient() {
-            override fun onPermissionRequest(request: PermissionRequest) { request.deny(); controller.reportError("Page permissions are disabled") }
+            override fun onPermissionRequest(request: PermissionRequest) { request.deny(); controller.reportError("Запросы разрешений со страницы отключены") }
             override fun onGeolocationPermissionsShowPrompt(origin: String, callback: android.webkit.GeolocationPermissions.Callback) {
                 callback.invoke(origin, false, false)
-                controller.reportError("Location access is disabled")
+                controller.reportError("Доступ к геолокации отключён")
             }
             override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
                 callback.onReceiveValue(null)
-                controller.reportError("File access is disabled")
+                controller.reportError("Доступ к файлам отключён")
                 return true
             }
             override fun onCreateWindow(view: WebView, dialog: Boolean, gesture: Boolean, message: android.os.Message): Boolean {
-                controller.reportError("Popup windows are disabled")
+                controller.reportError("Всплывающие окна отключены")
                 return false
             }
         }

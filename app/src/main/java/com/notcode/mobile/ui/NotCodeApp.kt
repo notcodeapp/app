@@ -6,8 +6,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,10 +20,15 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.core.view.WindowCompat
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -27,6 +36,8 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.Alignment
@@ -42,12 +53,17 @@ import androidx.compose.ui.text.input.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
 import com.notcode.mobile.*
 import com.notcode.mobile.R
 import com.notcode.mobile.filesystem.ProjectPath
 import com.notcode.mobile.model.*
+import com.notcode.mobile.push.NotCodeMessagingService
+import com.notcode.mobile.push.PushActionTarget
 import com.notcode.mobile.runtime.RuntimeState
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 private val Paper: Color @Composable get() = MaterialTheme.colorScheme.background
 private val Green: Color @Composable get() = MaterialTheme.colorScheme.primary
@@ -74,15 +90,34 @@ internal fun markdownBold(source: String): AnnotatedString = buildAnnotatedStrin
 fun NotCodeApp(vm: IdeViewModel) {
     val themeMode by vm.themeMode.collectAsState()
     val dark = when (themeMode) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
-    val colors = if (dark) darkColorScheme(
-        primary = Color(0xFFC4F16B), onPrimary = Color(0xFF20251F),
-        background = Color(0xFF121713), surface = Color(0xFF171E18), onSurface = Color(0xFFE0E8DE),
+    val colors = if (themeMode == "dynamic") {
+        // Material You: палитра из обоев пользователя (Android 12+, minSdk 31).
+        val context = androidx.compose.ui.platform.LocalContext.current
+        if (dark) androidx.compose.material3.dynamicDarkColorScheme(context)
+        else androidx.compose.material3.dynamicLightColorScheme(context)
+    } else if (dark) darkColorScheme(
+        primary = Color(0xFFC6F27A), onPrimary = Color(0xFF182117),
+        primaryContainer = Color(0xFF33472C), onPrimaryContainer = Color(0xFFE1F8C9),
+        secondary = Color(0xFFB7D5B5), onSecondary = Color(0xFF1B351F),
+        background = Color(0xFF101411), surface = Color(0xFF171D18), surfaceVariant = Color(0xFF202820),
+        onSurface = Color(0xFFE2E9DF), onSurfaceVariant = Color(0xFFB5C1B3),
         secondaryContainer = Color(0xFF29392C), onSecondaryContainer = Color(0xFFD7E8CD),
-        onSurfaceVariant = Color(0xFFB6C2B3), outlineVariant = Color(0xFF3D493E)
+        outline = Color(0xFF859384), outlineVariant = Color(0xFF3D493E)
     ) else lightColorScheme(
-        primary = Color(0xFF2B7656), background = Color(0xFFFAFBF8), surface = Color(0xFFFAFBF8),
-        onSurface = Color(0xFF17221D), secondaryContainer = Color(0xFFEAF1E8),
-        onSecondaryContainer = Color(0xFF20452D), outlineVariant = Color(0xFFDDE4DB)
+        primary = Color(0xFF286A4C), onPrimary = Color.White,
+        primaryContainer = Color(0xFFB9E9B8), onPrimaryContainer = Color(0xFF07391F),
+        secondary = Color(0xFF4D6751), onSecondary = Color.White,
+        background = Color(0xFFF7FAF5), surface = Color(0xFFF7FAF5), surfaceVariant = Color(0xFFE8F0E5),
+        onSurface = Color(0xFF17221A), onSurfaceVariant = Color(0xFF536257),
+        secondaryContainer = Color(0xFFE2EDE0), onSecondaryContainer = Color(0xFF20452D),
+        outline = Color(0xFF718071), outlineVariant = Color(0xFFD4DED2)
+    )
+    val shapes = Shapes(
+        extraSmall = RoundedCornerShape(8.dp),
+        small = RoundedCornerShape(12.dp),
+        medium = RoundedCornerShape(16.dp),
+        large = RoundedCornerShape(20.dp),
+        extraLarge = RoundedCornerShape(28.dp),
     )
     val previewState by vm.preview.state.collectAsState()
     val view = LocalView.current
@@ -98,11 +133,50 @@ fun NotCodeApp(vm: IdeViewModel) {
             }
         }
     }
-    MaterialTheme(colorScheme = colors, typography = Typography(bodyLarge = TextStyle(fontFamily = Manrope, fontSize = 15.sp), titleLarge = TextStyle(fontFamily = Manrope, fontWeight = FontWeight.Bold, fontSize = 22.sp))) {
+    MaterialTheme(colorScheme = colors, shapes = shapes, typography = Typography(bodyLarge = TextStyle(fontFamily = Manrope, fontSize = 15.sp), titleLarge = TextStyle(fontFamily = Manrope, fontWeight = FontWeight.Bold, fontSize = 22.sp))) {
         val drawer = rememberDrawerState(DrawerValue.Closed)
         val scope = rememberCoroutineScope()
+        val pushAction = vm.pushAction
+        LaunchedEffect(pushAction) {
+            if (pushAction != null && PushActionTarget.opensProjectsDrawer(pushAction.name) && vm.consumePushAction(pushAction)) {
+                drawer.open()
+            }
+        }
+        UpdateDialog(vm)
         val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { it?.let(vm::addProject) }
+        val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) registerPushToken(vm, view.context.applicationContext)
+        }
         val snackbar = remember { SnackbarHostState() }
+        LaunchedEffect(vm.authProfile?.username) {
+            if (vm.authProfile != null) {
+                if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(view.context, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    registerPushToken(vm, view.context.applicationContext)
+                }
+            }
+        }
+        // FCM rotates tokens in the background; re-register the new one without waiting for a restart.
+        val appContext = view.context.applicationContext
+        DisposableEffect(appContext) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (intent?.action != NotCodeMessagingService.ACTION_TOKEN) return
+                    if (vm.authProfile == null) return
+                    intent.getStringExtra(NotCodeMessagingService.EXTRA_TOKEN)
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let(vm::registerPushToken)
+                }
+            }
+            ContextCompat.registerReceiver(
+                appContext,
+                receiver,
+                IntentFilter(NotCodeMessagingService.ACTION_TOKEN),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            onDispose { runCatching { appContext.unregisterReceiver(receiver) } }
+        }
         var newFile by remember { mutableStateOf(false) }
         var showSshScreen by rememberSaveable { mutableStateOf(false) }
         var renamePath by remember { mutableStateOf<ProjectPath?>(null) }
@@ -129,7 +203,8 @@ fun NotCodeApp(vm: IdeViewModel) {
                 }
             }
         }
-        ModalNavigationDrawer(drawerState = drawer, drawerContent = {
+        // Во встроенном браузере свайп принадлежит странице: меню открывается только кнопкой «три полоски».
+        ModalNavigationDrawer(drawerState = drawer, gesturesEnabled = previewState.url == null, drawerContent = {
             ModalDrawerSheet(modifier = Modifier.widthIn(max = 340.dp)) {
                 Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("ПРОВОДНИК", style = MaterialTheme.typography.labelLarge, color = Green, modifier = Modifier.weight(1f))
@@ -141,6 +216,12 @@ fun NotCodeApp(vm: IdeViewModel) {
                     supportingContent = { Text(if (vm.sshConnected) "${vm.sshProfile?.username}@${vm.sshProfile?.host}" else "Файлы и ИИ на сервере") },
                     leadingContent = { Icon(Icons.Outlined.Dns, null, tint = Green) },
                     modifier = Modifier.clickable { showSshScreen = true; scope.launch { drawer.close() } },
+                )
+                ListItem(
+                    headlineContent = { Text("ПК · NotCode Desktop") },
+                    supportingContent = { Text("Удалённые чаты, файлы, копия и web preview") },
+                    leadingContent = { Icon(Icons.Outlined.Computer, null, tint = Green) },
+                    modifier = Modifier.clickable { showSshScreen = false; vm.tab = 4; scope.launch { drawer.close() } },
                 )
                 Text(vm.activeWorkspaceLabel, Modifier.padding(20.dp), fontWeight = FontWeight.Bold)
                 if (!vm.folder.isRoot) ListItem(headlineContent = { Text(".. / Назад") }, leadingContent = { Icon(Icons.Outlined.ArrowBack, null) }, modifier = Modifier.clickable { vm.browse(vm.folder.parent) })
@@ -176,7 +257,7 @@ fun NotCodeApp(vm: IdeViewModel) {
                 }
             }, bottomBar = {
                 NavigationBar(containerColor = Paper, tonalElevation = 0.dp) {
-                    listOf("Код" to Icons.Outlined.Code, "Агент" to Icons.Outlined.AutoAwesome, "Терминал" to Icons.Outlined.Terminal, "Настройки" to Icons.Outlined.Tune).forEachIndexed { index, (title, icon) ->
+                    listOf("Код" to Icons.Outlined.Code, "Агент" to Icons.Outlined.AutoAwesome, "Терминал" to Icons.Outlined.Terminal, "Настройки" to Icons.Outlined.Tune, "ПК" to Icons.Outlined.Computer).forEachIndexed { index, (title, icon) ->
                         NavigationBarItem(selected = vm.tab == index, onClick = { vm.tab = index }, icon = { Icon(icon, title) }, label = { Text(title, fontSize = 10.sp) })
                     }
                 }
@@ -190,6 +271,7 @@ fun NotCodeApp(vm: IdeViewModel) {
                         0 -> EditorScreen(vm, { picker.launch(null) }, { scope.launch { drawer.open() } }, { newFile = true }, rename, delete)
                         1 -> AgentScreen(vm)
                         2 -> key("terminal-screen") { TerminalScreen(vm) }
+                        4 -> DesktopPanel(vm)
                         else -> SettingsScreen(vm)
                     }
                 }
@@ -275,20 +357,24 @@ private fun FileActions(path: ProjectPath, enabled: Boolean, rename: (ProjectPat
 @Composable
 private fun SshConnectionScreen(vm: IdeViewModel, onOpenEditor: () -> Unit, onOpenAgent: () -> Unit) {
     val saved = vm.sshProfile
-    var name by remember { mutableStateOf("") }
-    var host by remember { mutableStateOf("") }
-    var port by remember { mutableStateOf("22") }
-    var username by remember { mutableStateOf("") }
-    var directory by remember { mutableStateOf("/") }
-    var authType by remember { mutableStateOf(SshAuthType.PASSWORD) }
+    // Non-secret fields survive rotation; password/key/passphrase deliberately do not.
+    var name by rememberSaveable { mutableStateOf("") }
+    var host by rememberSaveable { mutableStateOf("") }
+    var port by rememberSaveable { mutableStateOf("22") }
+    var username by rememberSaveable { mutableStateOf("") }
+    var directory by rememberSaveable { mutableStateOf("/") }
+    var authType by rememberSaveable { mutableStateOf(SshAuthType.PASSWORD) }
     var password by remember { mutableStateOf("") }
     var privateKey by remember { mutableStateOf("") }
     var passphrase by remember { mutableStateOf("") }
-    var command by remember { mutableStateOf("") }
+    var command by rememberSaveable { mutableStateOf("") }
+    var loadedSaved by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(saved?.id, saved?.host, saved?.username, saved?.remoteDirectory, saved?.port, saved?.authType) {
-        if (saved != null) {
+        // Fill from the stored profile once; later edits (including after rotation) must win.
+        if (!loadedSaved && saved != null) {
             name = saved.name; host = saved.host; port = saved.port.toString()
             username = saved.username; directory = saved.remoteDirectory; authType = saved.authType
+            loadedSaved = true
         }
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(18.dp)) {
@@ -364,7 +450,13 @@ private fun EditorScreen(vm: IdeViewModel, open: () -> Unit, files: () -> Unit, 
             }
             Text(vm.folder.value.ifBlank { "/" }, Modifier.padding(horizontal = 16.dp), color = Muted, fontSize = 12.sp)
             if (!vm.folder.isRoot) TextButton(onClick = { vm.browse(vm.folder.parent) }) { Text(".. / Назад") }
-            if (vm.entries.isEmpty()) Text(if (vm.busy || vm.filesLoading) "Загружаем файлы…" else "Папка пуста. Создайте файл в проводнике.", Modifier.padding(20.dp), color = Muted)
+            if (vm.entries.isEmpty()) Text(
+                when {
+                    vm.importProgress != null -> vm.importProgress.orEmpty()
+                    vm.busy || vm.filesLoading -> "Загружаем файлы…"
+                    else -> "Папка пуста. Создайте файл в проводнике."
+                },
+                Modifier.padding(20.dp), color = Muted)
             LazyColumn(Modifier.weight(1f)) {
                 items(vm.entries, key = { it.path.value }) { entry ->
                     ListItem(headlineContent = { Text(entry.name) }, leadingContent = { Icon(if (entry.isDirectory) Icons.Outlined.Folder else Icons.Outlined.Description, null) }, trailingContent = { if (!entry.isDirectory && entry.editable) FileActions(entry.path, canEdit, rename, delete) }, modifier = Modifier.clickable {
@@ -529,6 +621,7 @@ private class CodeHighlight : VisualTransformation {
             IconButton(onClick = { historyOpen = true }) { Icon(Icons.Outlined.History, "История чатов") }
             IconButton(onClick = { vm.clearChat() }, enabled = !vm.agentRunning) { Icon(Icons.Outlined.DeleteOutline, "Очистить диалог") }
         }
+        if (vm.agentPlan.isNotEmpty()) AgentPlanCard(vm.agentPlan, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         if (vm.chat.isEmpty()) Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.Center) {
             Text("Не чат рядом с пустотой.\nРабота с вашим проектом.", fontSize = 26.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold)
             Text("Агент читает файлы, ищет по проекту и предлагает изменения. Подтверждения включены по умолчанию; доверие можно включить только для текущего проекта.", Modifier.padding(top = 12.dp), color = Muted)
@@ -560,6 +653,7 @@ private class CodeHighlight : VisualTransformation {
         }
         if (vm.agentRunning) Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp); Text("Агент работает", Modifier.padding(start = 8.dp).weight(1f), fontSize = 12.sp); TextButton(onClick = { vm.stopAgent() }) { Text("Стоп") } }
         Column(Modifier.fillMaxWidth()) {
+            if (vm.messageQueue.isNotEmpty()) MessageQueuePanel(vm, Modifier.padding(horizontal = 12.dp))
             if (attachmentUris.isNotEmpty()) Text(
                 attachmentUris.zip(attachmentNames).joinToString(", ") { (uri, name) -> name.ifBlank { uri.lastPathSegment ?: "файл" } }.take(180),
                 Modifier.padding(horizontal = 16.dp),
@@ -570,8 +664,15 @@ private class CodeHighlight : VisualTransformation {
             )
             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Bottom) {
             IconButton(onClick = { filePicker.launch("*/*") }, enabled = !vm.agentRunning && attachmentUris.size < com.notcode.mobile.chat.AttachmentClassifier.MAX_ATTACHMENT_FILES) { Icon(Icons.Outlined.AttachFile, "Прикрепить файл", tint = Green) }
-            OutlinedTextField(prompt, { prompt = it }, placeholder = { Text("Что сделаем в проекте?", fontSize = 13.sp) }, modifier = Modifier.weight(1f).testTag("chat-input"), maxLines = 5, shape = RoundedCornerShape(18.dp))
-            IconButton(onClick = { if (vm.send(prompt, attachmentUris.toList())) { prompt = ""; attachmentUris.clear() } }, enabled = (prompt.isNotBlank() || attachmentUris.isNotEmpty()) && !vm.agentRunning, modifier = Modifier.padding(start = 8.dp, bottom = 4.dp).background(Soft, RoundedCornerShape(16.dp))) { Icon(Icons.Outlined.ArrowUpward, "Отправить", tint = Green) }
+            OutlinedTextField(prompt, { prompt = it }, placeholder = { Text(if (vm.agentRunning) "Агент работает — сообщение в очередь…" else "Что сделаем в проекте?", fontSize = 13.sp) }, modifier = Modifier.weight(1f).testTag("chat-input"), maxLines = 5, shape = RoundedCornerShape(18.dp))
+            IconButton(
+                onClick = {
+                    if (vm.agentRunning) { vm.enqueueMessage(prompt); prompt = "" }
+                    else if (vm.send(prompt, attachmentUris.toList())) { prompt = ""; attachmentUris.clear() }
+                },
+                enabled = (prompt.isNotBlank() || attachmentUris.isNotEmpty()) && !vm.busy,
+                modifier = Modifier.padding(start = 8.dp, bottom = 4.dp).background(Soft, RoundedCornerShape(16.dp)),
+            ) { Icon(if (vm.agentRunning) Icons.Outlined.Add else Icons.Outlined.ArrowUpward, if (vm.agentRunning) "В очередь" else "Отправить", tint = Green) }
             }
         }
         if (historyOpen) {
@@ -590,6 +691,83 @@ private class CodeHighlight : VisualTransformation {
                     }
                 }
             }, confirmButton = { TextButton(onClick = { historyOpen = false }) { Text("Закрыть") } })
+        }
+    }
+}
+
+/// Карточка плана агента: чеклист шагов из инструмента update_plan.
+/// В чат текстом не попадает — живёт над сообщениями.
+@Composable
+private fun AgentPlanCard(plan: List<com.notcode.mobile.agent.PlanStep>, modifier: Modifier = Modifier) {
+    var expanded by rememberSaveable { mutableStateOf(true) }
+    val done = plan.count { it.status == "done" }
+    val finished = done == plan.size && plan.isNotEmpty()
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f).compositeOver(MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, if (finished) Green.copy(alpha = 0.55f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }) {
+                Icon(Icons.Outlined.Checklist, null, Modifier.size(15.dp), tint = Green)
+                Text("ПЛАН", Modifier.padding(start = 7.dp), color = Green, fontSize = 10.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Bold)
+                Text("$done/${plan.size}", Modifier.padding(start = 8.dp), color = Green, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                if (finished) Text("выполнен", Modifier.padding(start = 8.dp).background(Green.copy(alpha = 0.18f), RoundedCornerShape(8.dp)).padding(horizontal = 6.dp, vertical = 1.dp), color = Green, fontSize = 10.sp)
+                Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, if (expanded) "Свернуть план" else "Развернуть план", Modifier.size(18.dp), tint = Muted)
+            }
+            if (expanded) {
+                plan.forEachIndexed { index, step ->
+                    Row(Modifier.fillMaxWidth().padding(top = 5.dp), verticalAlignment = Alignment.Top) {
+                        val mark = when (step.status) { "done" -> "✓"; "in_progress" -> "▶"; else -> "·" }
+                        Text(mark, Modifier.width(18.dp), color = if (step.status == "pending") Muted else Green, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Text(
+                            step.title,
+                            Modifier.weight(1f),
+                            fontSize = 13.sp,
+                            lineHeight = 17.sp,
+                            textDecoration = if (step.status == "done") TextDecoration.LineThrough else null,
+                            color = if (step.status == "pending") Muted else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Очередь сообщений: редактируется на месте, стрелками переставляется
+/// (выше — раньше отправится), принудительная отправка прерывает генерацию.
+@Composable
+private fun MessageQueuePanel(vm: IdeViewModel, modifier: Modifier = Modifier) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f).compositeOver(MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.LowPriority, null, Modifier.size(14.dp), tint = Muted)
+                Text("Очередь · ${vm.messageQueue.size}", Modifier.padding(start = 6.dp), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("выше — раньше отправится", Modifier.padding(start = 8.dp), color = Muted, fontSize = 10.sp)
+            }
+            vm.messageQueue.forEachIndexed { index, queued ->
+                Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        queued.text,
+                        { value -> vm.editQueuedMessage(queued.id, value) },
+                        modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                    IconButton(onClick = { vm.moveQueuedMessage(index, up = true) }, enabled = index > 0, modifier = Modifier.size(30.dp)) { Icon(Icons.Outlined.KeyboardArrowUp, "Раньше", Modifier.size(16.dp), tint = if (index > 0) Green else Muted) }
+                    IconButton(onClick = { vm.moveQueuedMessage(index, up = false) }, enabled = index < vm.messageQueue.lastIndex, modifier = Modifier.size(30.dp)) { Icon(Icons.Outlined.KeyboardArrowDown, "Позже", Modifier.size(16.dp), tint = if (index < vm.messageQueue.lastIndex) Green else Muted) }
+                    IconButton(onClick = { vm.sendQueuedNow(queued.id) }, modifier = Modifier.size(30.dp)) { Icon(Icons.Outlined.PlayArrow, "Отправить сейчас", Modifier.size(16.dp), tint = Green) }
+                    IconButton(onClick = { vm.removeQueuedMessage(queued.id) }, modifier = Modifier.size(30.dp)) { Icon(Icons.Outlined.Close, "Убрать из очереди", Modifier.size(16.dp), tint = Muted) }
+                }
+            }
         }
     }
 }
@@ -780,21 +958,53 @@ private fun RuntimePanel(vm: IdeViewModel, runtime: RuntimeState) {
     val active by vm.activeProfileId.collectAsState()
     val themeMode by vm.themeMode.collectAsState()
     val runtime by vm.runtimeState.collectAsState()
+    val scroll = rememberScrollState()
     var edit by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<ProviderProfile?>(null) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Ваш ИИ. Ваши правила.", style = MaterialTheme.typography.titleLarge)
         OutlinedButton(onClick = { uriHandler.openUri("https://t.me/NotCodeAI") }, modifier = Modifier.testTag("telegram-channel")) {
             Icon(Icons.Outlined.Send, null, Modifier.size(18.dp)); Text("Telegram-канал NotCode", Modifier.padding(start = 8.dp))
         }
+        Text("Аккаунт NotCode", style = MaterialTheme.typography.titleMedium)
+        when {
+            vm.authChecking -> LinearProgressIndicator(Modifier.fillMaxWidth())
+            vm.authProfile != null -> {
+                Text("Вход выполнен: @${vm.authProfile?.username}", color = Green)
+                if (vm.authProfile?.avatarUrl?.startsWith("https://") == true) {
+                    AsyncImage(model = vm.authProfile?.avatarUrl, contentDescription = "Аватар GitHub", modifier = Modifier.size(56.dp).clip(CircleShape))
+                }
+                OutlinedButton(onClick = { vm.logout() }) { Text("Выйти") }
+            }
+            else -> {
+                Text("Войдите через GitHub, чтобы подключить аккаунт NotCode.", color = Muted, fontSize = 13.sp)
+                val context = androidx.compose.ui.platform.LocalContext.current
+                Button(onClick = { (context as? Activity)?.let { (it as? com.notcode.mobile.MainActivity)?.openGitHubLogin() } }) { Text("Войти через GitHub") }
+            }
+        }
+        HorizontalDivider()
         Text("Тема оформления", style = MaterialTheme.typography.titleMedium)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("system" to "Системная", "light" to "Светлая", "dark" to "Тёмная").forEach { (mode, label) ->
+            listOf("system" to "Системная", "dynamic" to "Динамическая", "light" to "Светлая", "dark" to "Тёмная").forEach { (mode, label) ->
                 FilterChip(selected = themeMode == mode, onClick = { vm.setThemeMode(mode) }, label = { Text(label) }, modifier = Modifier.testTag("theme:$mode"))
             }
         }
         HorizontalDivider()
+        Text("Хранилище аккаунта", style = MaterialTheme.typography.titleMedium)
+        Text("Провайдеры и ключи синхронизируются между устройствами через сервер. Сервер хранит их зашифрованными.", color = Muted, fontSize = 12.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { vm.vaultSyncPull() }, enabled = vm.authProfile != null && !vm.busy) { Text("Загрузить из аккаунта") }
+            OutlinedButton(onClick = { vm.vaultSyncPush() }, enabled = vm.authProfile != null && !vm.busy) { Text("Отправить") }
+        }
+        HorizontalDivider()
+        Text("Чаты в аккаунте", style = MaterialTheme.typography.titleMedium)
+        Text("Все чаты проекта синхронизируются с вашим аккаунтом — на ПК и других устройствах будут те же диалоги.", color = Muted, fontSize = 12.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { vm.vaultSyncChats() }, enabled = vm.authProfile != null && !vm.busy && vm.fileSystem != null) { Text("Синхронизировать чаты") }
+        }
+        HorizontalDivider()
         RuntimePanel(vm, runtime)
+        HorizontalDivider()
         HorizontalDivider()
         Text("Модели", style = MaterialTheme.typography.titleMedium)
         Text("Добавьте провайдера один раз и укажите его модели списком. Для них будут общими адрес, API-ключ и настройки подключения; в помощнике выбирается конкретная модель.", color = Muted, fontSize = 13.sp)
@@ -856,32 +1066,41 @@ private fun RuntimePanel(vm: IdeViewModel, runtime: RuntimeState) {
         Text(if (vm.trustEnabled) "Для текущего проекта включено доверие" else "Подтверждения включены", color = if (vm.trustEnabled) MaterialTheme.colorScheme.error else Muted, fontSize = 12.sp)
         OutlinedButton(onClick = { vm.resetProjectTrust() }, enabled = vm.project != null && vm.trustEnabled) { Text("Снова спрашивать в этом проекте") }
         HorizontalDivider(Modifier.padding(vertical = 8.dp))
-        UpdatePanel(vm)
-        Text("NotCode ${BuildConfig.VERSION_NAME} · Android 12+\nРедактор, модели, read-only подагенты, Git и команды Ubuntu / PowerShell. Дополнительные среды устанавливаются пользователем.\nКлонирование и создание GitHub-репозиториев, поиск в интернете доступны агенту с подтверждением.", fontSize = 11.sp, lineHeight = 18.sp, color = Muted)
+        Text("NotCode ${BuildConfig.VERSION_NAME} · Android 12+\nРедактор, модели, read-only подагенты, Git и команды Ubuntu / PowerShell. Дополнительные среды устанавливаются пользователем.\nКлонирование и создание GitHub-репозиториев, поиск в интернете доступны агенту с подтверждением. Обновления проверяются автоматически раз в сутки.", fontSize = 11.sp, lineHeight = 18.sp, color = Muted)
     }
     if (edit) {
         val scope = rememberCoroutineScope()
         var provider by remember(editing) { mutableStateOf(editing?.providerName.orEmpty()) }
         var presetMenu by remember { mutableStateOf(false) }
         var note by remember(editing) { mutableStateOf(ProviderPresets.items.firstOrNull { it.name == editing?.providerName }?.note.orEmpty()) }
-        var name by remember(editing) { mutableStateOf(editing?.displayName ?: "") }
         var modelTitle by remember(editing) { mutableStateOf(editing?.title ?: "") }
         var url by remember(editing) { mutableStateOf(editing?.baseUrl ?: "") }
         var model by remember(editing) { mutableStateOf(editing?.modelId ?: "") }
         var key by remember(editing) { mutableStateOf("") }
         var fetchingModels by remember(editing) { mutableStateOf(false) }
         var modelFetchMessage by remember(editing) { mutableStateOf("") }
+        var fetchRevision by remember(editing) { mutableIntStateOf(0) }
+        var modelFetchJob by remember(editing) { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+        fun invalidateModels() {
+            fetchRevision++
+            modelFetchJob?.cancel()
+            modelFetchJob = null
+            fetchingModels = false
+            modelFetchMessage = ""
+        }
+        DisposableEffect(editing) { onDispose { modelFetchJob?.cancel() } }
         var noAuth by remember(editing) { mutableStateOf(editing?.authMode == AuthMode.NONE) }
         var tools by remember(editing) { mutableStateOf(editing?.toolsMode != CapabilityMode.DISABLED) }
         var streaming by remember(editing) { mutableStateOf(editing?.streamingMode != CapabilityMode.DISABLED) }
         var imageMode by remember(editing) { mutableStateOf(editing?.usage == com.notcode.mobile.model.ModelUsage.IMAGE) }
-        AlertDialog(onDismissRequest = { edit = false; key = "" }, title = { Text(if (editing == null) "Новая модель" else "Настройки модели") }, text = {
+        AlertDialog(onDismissRequest = { invalidateModels(); edit = false; key = "" }, title = { Text(if (editing == null) "Новая модель" else "Настройки модели") }, text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box {
                     OutlinedButton(onClick = { presetMenu = true }, modifier = Modifier.fillMaxWidth().testTag("provider-preset-picker")) { Text(provider.ifBlank { "Свой провайдер" }); Icon(Icons.Outlined.ArrowDropDown, null) }
                     DropdownMenu(expanded = presetMenu, onDismissRequest = { presetMenu = false }) {
                         ProviderPresets.items.forEach { preset ->
                             DropdownMenuItem(text = { Text(preset.name) }, onClick = {
+                                invalidateModels()
                                 provider = preset.name; url = preset.baseUrl; model = preset.suggestedModel; note = preset.note
                                 key = ""; noAuth = false; presetMenu = false
                             })
@@ -891,27 +1110,39 @@ private fun RuntimePanel(vm: IdeViewModel, runtime: RuntimeState) {
                 Text("Нет ключа или не хочешь платить? Заходи в Telegram-канал — там способы доступа к топовым моделям и туториалы по ИИ.", color = Muted, fontSize = 12.sp)
                 TextButton(onClick = { uriHandler.openUri("https://t.me/NotCodeAI") }) { Text("Подписаться", color = Green) }
                 if (note.isNotBlank()) Text(note, color = Muted, fontSize = 12.sp)
-                OutlinedTextField(model, { model = it }, label = { Text("ID моделей (по одной в строке или через запятую)") }, minLines = if (editing == null) 3 else 1, maxLines = 5)
+                OutlinedTextField(model, { invalidateModels(); model = it }, label = { Text("ID моделей (по одной в строке или через запятую)") }, minLines = if (editing == null) 3 else 1, maxLines = 5)
                 OutlinedTextField(modelTitle, { modelTitle = it }, label = { Text("Красивое название (необязательно)") }, singleLine = true)
-                OutlinedTextField(name, { name = it }, label = { Text("Название (необязательно)") }, singleLine = true)
-                OutlinedTextField(url, { url = it }, label = { Text("Base URL с /v1, если требуется") }, singleLine = true)
-                OutlinedTextField(key, { key = it }, label = { Text(if (editing == null) "API-ключ (если требуется)" else "Новый ключ (пусто — сохранить)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, enabled = !noAuth)
+                OutlinedTextField(url, { invalidateModels(); url = it }, label = { Text("Base URL с /v1, если требуется") }, singleLine = true)
+                OutlinedTextField(key, { invalidateModels(); key = it }, label = { Text(if (editing == null) "API-ключ (если требуется)" else "Новый ключ (пусто — сохранить)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, enabled = !noAuth)
                 OutlinedButton(
                     onClick = {
-                        scope.launch {
-                            fetchingModels = true
-                            modelFetchMessage = "Запрашиваю GET /models…"
+                        invalidateModels()
+                        val revision = fetchRevision
+                        val requestedUrl = url
+                        val requestedKey = key
+                        val requestedNoAuth = noAuth
+                        fetchingModels = true
+                        modelFetchMessage = "Проверяю API с /v1 и без /v1…"
+                        modelFetchJob = scope.launch {
                             try {
-                                val ids = vm.fetchModels(url, key, noAuth)
-                                model = ids.joinToString("\n")
-                                modelFetchMessage = "Загружено моделей: ${ids.size}. Список можно отредактировать."
+                                val found = vm.fetchModels(requestedUrl, requestedKey, requestedNoAuth)
+                                if (revision == fetchRevision) {
+                                    url = found.baseUrl
+                                    model = found.models.joinToString("\n")
+                                    modelFetchMessage = "Загружено моделей: ${found.models.size}. Нажмите «Сохранить»."
+                                }
                             } catch (error: kotlinx.coroutines.CancellationException) {
                                 throw error
                             } catch (error: Exception) {
-                                val reason = error.message?.take(160)?.takeIf { it.isNotBlank() } ?: "ошибка сети"
-                                modelFetchMessage = "Не удалось загрузить модели: $reason"
+                                if (revision == fetchRevision) {
+                                    val reason = error.message?.take(160)?.takeIf { it.isNotBlank() } ?: "ошибка сети"
+                                    modelFetchMessage = "Не удалось загрузить модели: $reason"
+                                }
                             } finally {
-                                fetchingModels = false
+                                if (revision == fetchRevision) {
+                                    fetchingModels = false
+                                    modelFetchJob = null
+                                }
                             }
                         }
                     },
@@ -923,7 +1154,7 @@ private fun RuntimePanel(vm: IdeViewModel, runtime: RuntimeState) {
                 }
                 Text("Автозагрузка может не сработать: провайдер может не поддерживать /models или возвращать список в другом формате. Тогда укажите ID моделей вручную.", fontSize = 11.sp, color = Muted)
                 if (modelFetchMessage.isNotBlank()) Text(modelFetchMessage, fontSize = 12.sp, color = if (modelFetchMessage.startsWith("Не удалось")) MaterialTheme.colorScheme.error else Muted)
-                Toggle("Без авторизации", noAuth) { noAuth = it }
+                Toggle("Без авторизации", noAuth) { invalidateModels(); noAuth = it; if (it) key = "" }
                 Toggle("Модель для генерации изображений", imageMode) { imageMode = it }
                 if (imageMode) {
                     Text("Использует POST /images/generations. Такая модель не выбирается как основная, но основной агент может вызывать generate_image. Сохранение картинок всегда спрашивает вас.", fontSize = 11.sp, color = Muted)
@@ -932,48 +1163,81 @@ private fun RuntimePanel(vm: IdeViewModel, runtime: RuntimeState) {
                 Toggle("Потоковый ответ", streaming) { streaming = it }
                 Text("Используйте HTTPS. Отключите потоковый ответ или инструменты, если модель их не поддерживает.", fontSize = 11.sp, color = Muted)
             }
-        }, confirmButton = { TextButton(onClick = { vm.saveProfile(modelTitle, url, model, key, noAuth, tools, streaming, editing?.id, providerName = provider, imageMode = imageMode); key = ""; edit = false }, enabled = url.isNotBlank() && model.isNotBlank() && (noAuth || key.isNotBlank() || editing != null)) { Text("Сохранить") } }, dismissButton = { TextButton(onClick = { edit = false; key = "" }) { Text("Отмена") } })
+        }, confirmButton = { TextButton(onClick = { invalidateModels(); vm.saveProfile(modelTitle, url, model, key, noAuth, tools, streaming, editing?.id, providerName = provider, imageMode = imageMode); key = ""; edit = false }, enabled = !fetchingModels && url.isNotBlank() && model.isNotBlank() && (noAuth || key.isNotBlank() || editing != null)) { Text("Сохранить") } }, dismissButton = { TextButton(onClick = { invalidateModels(); edit = false; key = "" }) { Text("Отмена") } })
     }
 }
 @Composable private fun Toggle(label: String, checked: Boolean, change: (Boolean) -> Unit) { Row(verticalAlignment = Alignment.CenterVertically) { Text(label, Modifier.weight(1f), fontSize = 12.sp); Switch(checked, change) } }
 @Composable private fun SettingNote(icon: ImageVector, title: String, description: String) {
     Row(Modifier.padding(vertical = 6.dp)) { Icon(icon, null, tint = Green, modifier = Modifier.size(22.dp)); Column(Modifier.padding(start = 12.dp)) { Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp); Text(description, Modifier.padding(top = 4.dp), color = Muted, fontSize = 12.sp, lineHeight = 19.sp) } }
 }
-@Composable private fun UpdatePanel(vm: IdeViewModel) {
+/** Диалог автообновления: появляется сам, когда раз в сутки находится новая версия. */
+@Composable
+private fun UpdateDialog(vm: IdeViewModel) {
     val update = vm.updateStatus
-    val repository by vm.updateRepository.collectAsState()
-    val autoCheck by vm.autoUpdateEnabled.collectAsState()
-    var repositoryDraft by remember(repository) { mutableStateOf(repository) }
-    Text("Обновления", style = MaterialTheme.typography.titleMedium)
-    Toggle("Проверять автоматически", autoCheck) { vm.setAutoUpdateEnabled(it) }
-    Text("Раз в 6 часов приложение смотрит релизы GitHub. Скачивание и установка — только по вашему нажатию.", fontSize = 11.sp, color = Muted)
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-        OutlinedTextField(repositoryDraft, { repositoryDraft = it }, label = { Text("Репозиторий релизов (owner/repo)") }, singleLine = true, modifier = Modifier.weight(1f).testTag("update-repository"))
-        TextButton(onClick = { vm.setUpdateRepository(repositoryDraft) }, enabled = repositoryDraft.isNotBlank() && repositoryDraft != repository) { Text("Сохранить") }
-    }
-    OutlinedButton(onClick = { vm.checkForUpdates() }, enabled = update.phase != UpdatePhase.CHECKING, modifier = Modifier.fillMaxWidth().testTag("check-updates")) {
-        if (update.phase == UpdatePhase.CHECKING) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-        Text(if (update.phase == UpdatePhase.CHECKING) "Проверяю релизы…" else "Проверить обновления", Modifier.padding(start = 8.dp))
-    }
+    if (!vm.showUpdateDialog) return
     when (update.phase) {
-        UpdatePhase.UP_TO_DATE -> Text("Установлена последняя версия (${update.version}).", fontSize = 12.sp, color = Muted)
-        UpdatePhase.FAILED -> Text("Не получилось: ${update.error}", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
-        UpdatePhase.AVAILABLE -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Доступно ${update.version} · установлена ${vm.installedVersionName}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            if (update.notes.isNotBlank()) Text(update.notes.take(600), fontSize = 11.sp, color = Muted, lineHeight = 17.sp, maxLines = 6, overflow = TextOverflow.Ellipsis)
-            Button(onClick = { vm.downloadUpdate() }, modifier = Modifier.fillMaxWidth().testTag("download-update")) { Text("Скачать ${update.version}") }
-        }
-        UpdatePhase.DOWNLOADING -> {
-            val percent = if (update.totalBytes > 0) (update.downloadedBytes * 100 / update.totalBytes).toFloat() / 100f else 0f
-            LinearProgressIndicator(progress = { percent }, modifier = Modifier.fillMaxWidth())
-            val downloaded = update.downloadedBytes / (1024 * 1024)
-            val total = if (update.totalBytes > 0) "${update.totalBytes / (1024 * 1024)} МиБ" else "неизвестно"
-            Text("Загружено $downloaded МиБ из $total · ${vm.installedVersionName} → ${update.version}", fontSize = 12.sp, color = Muted)
-        }
-        UpdatePhase.READY -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Button(onClick = { vm.installUpdate() }, modifier = Modifier.fillMaxWidth().testTag("install-update")) { Text("Установить ${update.version}") }
-            Text("Откроется системный установщик — подтвердите установку там. История чатов, модели и файлы проекта сохраняются.", fontSize = 11.sp, color = Muted)
-        }
+        UpdatePhase.AVAILABLE -> AlertDialog(
+            onDismissRequest = { vm.snoozeUpdate() },
+            confirmButton = {},
+            containerColor = MaterialTheme.colorScheme.surface,
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Box(
+                        Modifier.size(64.dp).background(Green.copy(alpha = 0.14f), RoundedCornerShape(50)),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Outlined.SystemUpdateAlt, null, tint = Green, modifier = Modifier.size(32.dp)) }
+                    Text("Доступно обновление", fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.padding(top = 12.dp))
+                    Text("NotCode ${update.version.removePrefix("v")} · установлена ${vm.installedVersionName}", fontSize = 12.sp, color = Muted, modifier = Modifier.padding(top = 4.dp))
+                    if (update.notes.isNotBlank()) {
+                        Text(update.notes.take(400), fontSize = 11.sp, color = Muted, lineHeight = 17.sp, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp))
+                    }
+                    Button(
+                        onClick = { vm.downloadUpdate() },
+                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp).testTag("download-update"),
+                        colors = ButtonDefaults.buttonColors(containerColor = Green, contentColor = MaterialTheme.colorScheme.surface),
+                    ) { Icon(Icons.Outlined.Download, null, Modifier.size(18.dp)); Text("Обновить", Modifier.padding(start = 8.dp), fontWeight = FontWeight.Bold) }
+                    TextButton(onClick = { vm.snoozeUpdate() }, modifier = Modifier.fillMaxWidth().padding(top = 2.dp)) {
+                        Text("Напомнить позже", fontSize = 13.sp, color = Muted)
+                    }
+                }
+            },
+        )
+        UpdatePhase.DOWNLOADING -> AlertDialog(
+            onDismissRequest = { },
+            confirmButton = {},
+            containerColor = MaterialTheme.colorScheme.surface,
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Text("Загружаю обновление ${update.version.removePrefix("v")}", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    val percent = if (update.totalBytes > 0) (update.downloadedBytes * 100 / update.totalBytes).toInt() else 0
+                    LinearProgressIndicator(
+                        progress = { percent / 100f },
+                        modifier = Modifier.fillMaxWidth().padding(top = 14.dp).height(6.dp).clip(RoundedCornerShape(50)),
+                        color = Green,
+                    )
+                    val downloaded = update.downloadedBytes / (1024 * 1024)
+                    val total = if (update.totalBytes > 0) "${update.totalBytes / (1024 * 1024)} МиБ" else "…"
+                    Text("$percent% · $downloaded МиБ из $total", fontSize = 11.sp, color = Muted, modifier = Modifier.padding(top = 6.dp))
+                }
+            },
+        )
+        UpdatePhase.READY -> AlertDialog(
+            onDismissRequest = { },
+            confirmButton = {},
+            containerColor = MaterialTheme.colorScheme.surface,
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Outlined.TaskAlt, null, tint = Green, modifier = Modifier.size(44.dp))
+                    Text("Обновление ${update.version.removePrefix("v")} готово", fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.padding(top = 8.dp))
+                    Button(
+                        onClick = { vm.installUpdate() },
+                        modifier = Modifier.fillMaxWidth().padding(top = 14.dp).testTag("install-update"),
+                        colors = ButtonDefaults.buttonColors(containerColor = Green, contentColor = MaterialTheme.colorScheme.surface),
+                    ) { Text("Установить", fontWeight = FontWeight.Bold) }
+                    Text("Откроется системный установщик. История чатов, модели и файлы проекта сохраняются.", fontSize = 11.sp, color = Muted, lineHeight = 17.sp, modifier = Modifier.padding(top = 6.dp))
+                }
+            },
+        )
         else -> Unit
     }
 }

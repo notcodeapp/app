@@ -1,0 +1,1 @@
+X:\android-app\terminal-emulator\build\intermediates\cxx\RelWithDebInfo\y545i223\obj\x86

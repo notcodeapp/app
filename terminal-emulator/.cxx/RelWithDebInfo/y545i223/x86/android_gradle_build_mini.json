@@ -1,0 +1,27 @@
+{
+  "buildFiles": [
+    "X:\\android-app\\terminal-emulator\\src\\main\\jni\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "X:\\.tools\\android-sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+      "-C",
+      "X:\\android-app\\terminal-emulator\\.cxx\\RelWithDebInfo\\y545i223\\x86",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "X:\\.tools\\android-sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+    "-C",
+    "X:\\android-app\\terminal-emulator\\.cxx\\RelWithDebInfo\\y545i223\\x86",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "termux::@6890427a1f51a3e7e1df": {
+      "artifactName": "termux",
+      "abi": "x86",
+      "output": "X:\\android-app\\terminal-emulator\\build\\intermediates\\cxx\\RelWithDebInfo\\y545i223\\obj\\x86\\libtermux.so",
+      "runtimeFiles": []
+    }
+  }
+}

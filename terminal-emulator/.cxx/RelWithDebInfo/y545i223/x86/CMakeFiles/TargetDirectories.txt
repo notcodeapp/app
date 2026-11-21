@@ -1,0 +1,3 @@
+X:/android-app/terminal-emulator/.cxx/RelWithDebInfo/y545i223/x86/CMakeFiles/termux.dir
+X:/android-app/terminal-emulator/.cxx/RelWithDebInfo/y545i223/x86/CMakeFiles/edit_cache.dir
+X:/android-app/terminal-emulator/.cxx/RelWithDebInfo/y545i223/x86/CMakeFiles/rebuild_cache.dir

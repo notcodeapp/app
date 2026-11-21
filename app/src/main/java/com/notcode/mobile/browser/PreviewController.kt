@@ -21,7 +21,7 @@ class PreviewController(context: Context) {
     fun openUrl(raw: String) {
         runCatching { PreviewUrlPolicy.normalize(raw) }
             .onSuccess { mutableState.value = PreviewState(url = it) }
-            .onFailure { reportError(it.message ?: "Cannot open URL") }
+            .onFailure { reportError(it.message ?: "Не удалось открыть ссылку") }
     }
 
     @Synchronized
@@ -30,7 +30,7 @@ class PreviewController(context: Context) {
             val canonical = root.canonicalFile
             // Accept only the existing private working-copy layout, not filesDir, SAF, or terminal home.
             require(root.absoluteFile == canonical && canonical.name == "work" &&
-                canonical.parentFile?.parentFile == projects) { "Preview root must be a project workspace" }
+                canonical.parentFile?.parentFile == projects) { "Предпросмотр доступен только для локальной копии проекта" }
             if (serverRoot != canonical) {
                 server?.close()
                 server = null
@@ -40,7 +40,7 @@ class PreviewController(context: Context) {
             }
             requireNotNull(server).urlFor(path.value)
         }.onSuccess { mutableState.value = PreviewState(url = it, title = path.name) }
-            .onFailure { reportError(it.message ?: "Cannot preview project file") }
+            .onFailure { reportError(it.message ?: "Не удалось открыть файл в предпросмотре") }
     }
 
     internal fun reportError(message: String) {
