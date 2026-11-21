@@ -3,9 +3,9 @@ name: Android CI
 on:
   push:
     branches: [main]
-    paths: ["android-app/**", ".github/workflows/android.yml"]
+    paths: ["app/**", "gradle/**", ".github/workflows/android.yml"]
   pull_request:
-    paths: ["android-app/**", ".github/workflows/android.yml"]
+    paths: ["app/**", "gradle/**", ".github/workflows/android.yml"]
 
 jobs:
   build:
@@ -91,9 +91,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    defaults:
-      run:
-        working-directory: android-app
     steps:
       - uses: actions/checkout@v4
 
