@@ -7,10 +7,6 @@ on:
   pull_request:
     paths: ["android-app/**", ".github/workflows/android.yml"]
 
-defaults:
-  run:
-    working-directory: android-app
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -50,7 +46,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: notcode-debug-apks
-          path: android-app/app/build/outputs/apk/**/*.apk
+          path: app/build/outputs/apk/**/*.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -86,7 +82,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: notcode-release-apks
-          path: android-app/app/build/outputs/apk/**/*.apk
+          path: app/build/outputs/apk/**/*.apk
           if-no-files-found: error
 
   tag-release:
@@ -137,4 +133,4 @@ jobs:
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
-          files: android-app/renamed/*.apk
+          files: renamed/*.apk
