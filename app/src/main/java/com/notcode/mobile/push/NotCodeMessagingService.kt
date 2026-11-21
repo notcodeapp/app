@@ -52,6 +52,12 @@ class NotCodeMessagingService : FirebaseMessagingService() {
             .addAction(0, actionLabel, contentIntent)
             .setAutoCancel(true)
             .build()
+        // Android 13+: уведомления требуют runtime-разрешения POST_NOTIFICATIONS.
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
         NotificationManagerCompat.from(this).notify(notificationId, notification)
     }
 
