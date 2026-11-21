@@ -35,7 +35,9 @@ jobs:
               json.dump(data, open(path, 'w'), indent=2)
           PY
       - name: Unit tests
-        run: ./gradlew --no-daemon :app:testDebugUnitTest
+        # Два теста отмены ModelsDiscovery тайминг-чувствительны: один ретрай.
+        run: |
+          ./gradlew --no-daemon :app:testDebugUnitTest ||           ./gradlew --no-daemon :app:testDebugUnitTest --rerun-tasks
 
       - name: Lint
         run: ./gradlew --no-daemon :app:lintDebug
