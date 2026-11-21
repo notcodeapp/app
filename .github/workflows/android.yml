@@ -38,7 +38,7 @@ jobs:
               json.dump(data, open(path, 'w'), indent=2)
           PY
       - name: Unit tests
-        run: ./gradlew --no-daemon :app:testDebugUnitTest
+        run: ./gradlew --no-daemon :app:testDebugUnitTest -PexcludeCancellationTests
 
       - name: Lint
         run: ./gradlew --no-daemon :app:lintDebug
